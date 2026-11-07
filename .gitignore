@@ -1,0 +1,18 @@
+# Local/private reference material and device config — never published
+ref/
+config.json
+
+# Dependencies and tooling
+node_modules/
+.tmp/
+_site/
+
+# Local overrides
+*.local
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Scratch screenshots
+screenshots-tmp/

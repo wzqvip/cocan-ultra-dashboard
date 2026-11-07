@@ -1,0 +1,67 @@
+name: Deploy static dashboard to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Assemble static site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Assemble _site
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Pages must never publish an empty/broken site.
+          if [ ! -f index.html ]; then
+            echo "::error file=index.html::index.html is missing — refusing to publish an empty site."
+            exit 1
+          fi
+
+          mkdir -p _site
+          cp index.html _site/
+
+          # Optional static assets: copy when present, otherwise keep going.
+          for target in assets manifest.webmanifest .nojekyll; do
+            if [ -e "$target" ]; then
+              cp -R "$target" _site/
+              echo "::notice::copied $target"
+            else
+              echo "::notice::$target not found — skipping (no build step; runtime files are hand-written)."
+            fi
+          done
+
+          echo "--- _site contents ---"
+          find _site -maxdepth 2 | sort
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

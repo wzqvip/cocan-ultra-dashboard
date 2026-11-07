@@ -1,0 +1,16 @@
+{
+  "name": "cocan-ultra-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Unofficial live web dashboard for the CANDYSIGN AI 小电拼 Ultra (CP-02) charger.",
+  "license": "MIT",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
