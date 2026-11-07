@@ -547,6 +547,15 @@ function urlWithoutDemo() {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
+function urlWithLocal() {
+  const url = new URL(location.href);
+  url.searchParams.set("local", "1");
+  url.searchParams.delete("demo");
+  url.searchParams.delete("demoDevices");
+  url.searchParams.delete("multi");
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
 function currentInterval() {
   const value = Number(state.settings?.intervalMs);
   return Math.min(60000, Math.max(1500, Number.isFinite(value) ? value : 3000));
@@ -684,6 +693,7 @@ function renderBanners() {
   if (state.demo) {
     const count = state.devices.length || state.demoCount;
     const actions = [];
+    actions.push({ label: t("connectLocal"), href: urlWithLocal() });
     if (getUrlOverrides().demo) {
       actions.push({ label: t("demoExit"), href: urlWithoutDemo() });
       actions.push(
@@ -735,6 +745,18 @@ function renderBanners() {
         { label: t("devicesTitle"), action: "devices", kind: "primary" },
         { label: t("scanLan"), action: "scan" },
         { label: t("enterDemo"), href: urlWithDemo(1) },
+      ],
+    });
+  }
+
+  if (!state.demo && getUrlOverrides().local && status !== "live") {
+    banners.push({
+      tone: "info",
+      title: t("localModeTitle"),
+      text: t("localModeText"),
+      actions: [
+        { label: t("retry"), action: "retry", kind: "primary" },
+        { label: t("openSettings"), action: "settings" },
       ],
     });
   }

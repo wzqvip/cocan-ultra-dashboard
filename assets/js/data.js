@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS = {
   multi: false,
   multiHosts: [],
   mode: "auto", // auto | json | prometheus
+  apiBase: "", // optional cross-origin local proxy, e.g. http://127.0.0.1:8787
   theme: "auto", // auto | light | dark
   lang: "zh", // zh | en
   intervalMs: 3000,
@@ -63,6 +64,7 @@ function normalizeSettings(input) {
   if (typeof out.multi !== "boolean") out.multi = Boolean(out.multi);
   if (!["auto", "json", "prometheus"].includes(out.mode)) out.mode = "auto";
   if (!["pro", "simple"].includes(out.view)) out.view = "pro";
+  if (typeof out.apiBase !== "string") out.apiBase = "";
   return out;
 }
 
@@ -194,6 +196,8 @@ export function getUrlOverrides() {
     mode: params.get("mode") || "",
     demo: demoRaw !== null && demoRaw !== "0",
     demoDevices,
+    local: params.get("local") === "1",
+    api: params.get("api") || "",
     multiHosts: multi
       .split(",")
       .map((h) => h.trim())
@@ -201,9 +205,20 @@ export function getUrlOverrides() {
   };
 }
 
+/** Optional cross-origin local proxy, e.g. https://<pages>/?local=1. */
+export function getApiBase() {
+  const url = getUrlOverrides();
+  if (url.api) return String(url.api).replace(/\/+$/, "");
+  if (url.local) return "http://127.0.0.1:8787";
+  const settings = loadSettings();
+  return String(settings.apiBase || "").replace(/\/+$/, "");
+}
+
 /** GitHub Pages / file:// / ?demo=1|2 → demo data (no device reachable). */
 export function isDemoLocation() {
-  if (getUrlOverrides().demo) return true;
+  const overrides = getUrlOverrides();
+  if (overrides.local || overrides.api) return false;
+  if (overrides.demo) return true;
   if (location.protocol === "file:") return true;
   return /(^|\.)github\.io$/i.test(location.hostname);
 }
@@ -217,10 +232,11 @@ async function fetchJson(path, { timeoutMs = 8000 } = {}) {
   if (!/^https?:$/.test(location.protocol)) {
     throw new Error("请通过 http://127.0.0.1:8787 打开（file:// 无法访问代理）");
   }
+  const target = /^https?:\/\//i.test(path) ? path : `${getApiBase()}${path}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(path, {
+    const res = await fetch(target, {
       signal: controller.signal,
       cache: "no-store",
       headers: { accept: "application/json" },
@@ -391,6 +407,8 @@ export function effectiveSettings() {
     multi,
     multiHosts,
     mode: url.mode || settings.mode,
+    apiBase: getApiBase(),
+    local: url.local,
     demo: isDemoLocation(),
     demoDevices: url.demoDevices,
   };

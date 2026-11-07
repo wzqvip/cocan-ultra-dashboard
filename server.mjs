@@ -543,7 +543,29 @@ function serveStatic(req, res, pathname) {
 /* API router                                                         */
 /* ------------------------------------------------------------------ */
 
+const CORS_ORIGIN_RE = /^(https:\/\/[a-z0-9-]+\.github\.io|http:\/\/(127\.0\.0\.1|localhost)(:\d+)?)$/i;
+
+function applyCors(req, res) {
+  const origin = req.headers.origin;
+  if (!origin) return;
+  if (!CORS_ORIGIN_RE.test(origin)) return;
+  res.setHeader("access-control-allow-origin", origin);
+  res.setHeader("vary", "origin");
+  res.setHeader("access-control-allow-methods", "GET,HEAD,OPTIONS");
+  res.setHeader("access-control-allow-headers", "content-type");
+  res.setHeader("access-control-max-age", "600");
+  if (String(req.headers["access-control-request-private-network"] || "").toLowerCase() === "true") {
+    res.setHeader("access-control-allow-private-network", "true");
+  }
+}
+
 async function handleApi(req, res, url) {
+  applyCors(req, res);
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
   if (req.method !== "GET" && req.method !== "HEAD") {
     sendJson(res, 405, { ok: false, error: "METHOD_NOT_ALLOWED", message: "Only GET" });
     return;

@@ -27,8 +27,25 @@ GitHub Pages 上已经编译部署好的在线网页（点击图片或下面链�
 - [直接看六设备演示（P0–P29）](https://wzqvip.github.io/cocan-ultra-dashboard/?demo=6)
 - [GitHub 仓库](https://github.com/wzqvip/cocan-ultra-dashboard)
 
-> Pages 上是**演示模式**：HTTPS 页面不能直接请求 `http://` 设备，且设备没有 CORS 头。
-> 真机数据请在本地运行 `node server.mjs`，浏览器打开 `http://127.0.0.1:8787`。
+> Pages 上是**演示模式**。Chrome 142+ 可以弹出“访问本地网络”权限，但设备的 HTTP 服务
+> **没有 CORS 头、OPTIONS 也返回 405**，所以不能把 Pages 直接指向设备 `/metrics.json`；
+> 必须在本地跑 `server.mjs` 作为代理。
+
+### 在 Pages 里连接本地设备
+
+1. 本机运行：
+   ```bash
+   node server.mjs --host cp02-<PSN>.local
+   ```
+2. 打开 Pages，点演示横幅里的 **「连接本地设备」**，或访问：
+   ```text
+   https://wzqvip.github.io/cocan-ultra-dashboard/?local=1
+   ```
+3. Chrome 询问本地网络权限时点 **允许**。
+
+页面会通过 `http://127.0.0.1:8787` 读真机；代理端口不是 8787 时用
+`?api=http://127.0.0.1:<port>`。Chrome 的权限弹窗只解决混合内容/本地网络，
+**不绕过设备 CORS**；详见 [docs/LOCAL-CONNECTION.md](docs/LOCAL-CONNECTION.md)。
 
 | 竖屏（2 台演示） | 横屏（2 台演示） |
 | --- | --- |
@@ -45,6 +62,7 @@ GitHub Pages 上已经编译部署好的在线网页（点击图片或下面链�
 | [数据契约](docs/DATA-CONTRACT.md) | `/api/snapshot`、`/api/multi`、`/api/history` 字段与单位 |
 | [App 对齐规格](docs/APP-PARITY.md) | 官方 App UI、功率图、协议语义、来源与风险 |
 | [MQTT / MCP / 授权](docs/MQTT-AND-LICENSING.md) | MCP 获取、自定义 broker、feature bit、实测与还原流程 |
+| [Pages 连接本地设备](docs/LOCAL-CONNECTION.md) | Chrome LNA、CORS 限制、`?local=1` / `?api=` |
 | [README](README.md) | 本页：功能、快速开始、部署、排错 |
 | [LICENSE](LICENSE) | PolyForm Noncommercial 1.0.0（禁止商用） |
 | [GitHub Actions](.github/workflows/pages.yml) | Pages 构建/部署流程 |
@@ -356,6 +374,7 @@ GitHub Pages，没有构建步骤。Pages 上的页面会自动进入**演示模
 │   ├── DATA-CONTRACT.md       # 前端唯一数据契约（含 /api/multi）
 │   ├── APP-PARITY.md          # 与 App 的对齐规格、来源与风险
 │   ├── PRO-ULTRA.md           # Pro/Ultra 识别、混用、能力差异、已测范围
+│   ├── LOCAL-CONNECTION.md    # Pages + Chrome LNA / CORS / 本地代理（?local=1）
 │   ├── MQTT-AND-LICENSING.md  # MQTT broker / MCP / feature bit 实测
 │   └── screenshots/           # README 截图（演示数据）
 ├── start.bat / start.sh
@@ -388,6 +407,8 @@ curl "http://127.0.0.1:8787/api/multi?hosts=host1,host2"
 - 160 W 是标称预算；实际分配由设备策略决定，本看板无法读取当前策略。
 - 温度/PD/电池/线材需要 MCP；自定义 MQTT broker 和 `/metrics.json` PD 详情由 license
   feature bit 控制，本机 Pro 2.2.0 未开启（`setbrokerz` 返回 403），不要强行绕过。
+- **Pages 不能直接读取设备**：Chrome LNA 权限只解决混合内容，不绕过 CORS；Pages 需要
+  `?local=1` + 本地 `server.mjs` 代理，详见 [docs/LOCAL-CONNECTION.md](docs/LOCAL-CONNECTION.md)。
 - 扫描只覆盖本机物理网卡的 /24 网段；跨网段、多网卡或复杂 VLAN 请手动输入 IP。
 - 多台模式每台独立轮询；设备较多时首屏会慢一些，单台超时不影响其余设备。
 - 多台端口编号是“设备槽位 × 5 + 本地 id”：机 1 为 P0–P4、机 2 为 P5–P9；离线槽位保留，不重新压缩。
