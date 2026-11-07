@@ -70,7 +70,7 @@ test("normalizeJson produces stable snapshot", () => {
   assert.equal(snap.ports[0].stateLabel, "空闲");
   assert.equal(snap.ports[1].powerW, 21.543);
   assert.equal(snap.ports[1].sessionWh, 1.3886);
-  assert.equal(snap.device.modelLabel, "AI 小电拼 Pro / Ultra（CP-02）");
+  assert.equal(snap.device.modelLabel, "AI 小电拼 Pro（CP-02）");
   assert.equal(snap.device.maxPowerW, 160);
   assert.equal(snap.totals.powerW, 22.01);
   assert.equal(snap.totals.attachedCount, 3);

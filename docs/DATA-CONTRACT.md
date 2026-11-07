@@ -28,7 +28,7 @@ HTTP 端点的细节；数据层负责把设备的 `/metrics.json`、Prometheus 
     "name": "CP02-EXAMPLE",
     "model": "pro",
     "family": "CP02",
-    "modelLabel": "AI 小电拼 Pro / Ultra（CP-02）",
+    "modelLabel": "AI 小电拼 Pro（CP-02）",
     "color": "white",
     "hwRev": "MP0",
     "esp32Version": "2.2.0",

@@ -54,7 +54,7 @@ const DEMO_DEVICE = {
   name: "CP02-DEMO",
   model: "pro",
   family: "CP02",
-  modelLabel: "AI 小电拼 Pro / Ultra（CP-02）",
+  modelLabel: "AI 小电拼 Pro（CP-02）",
   color: "white",
   hwRev: "MP0",
   esp32Version: "2.2.0",
