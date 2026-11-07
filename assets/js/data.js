@@ -63,7 +63,7 @@ function normalizeSettings(input) {
   if (!out.multiHosts.length) out.multiHosts = out.devices.slice(0, 4).map((d) => d.host);
   if (typeof out.multi !== "boolean") out.multi = Boolean(out.multi);
   if (!["auto", "json", "prometheus"].includes(out.mode)) out.mode = "auto";
-  if (!["pro", "simple"].includes(out.view)) out.view = "pro";
+  if (!["pro", "simple", "meter", "cuktech"].includes(out.view)) out.view = "pro";
   if (typeof out.apiBase !== "string") out.apiBase = "";
   return out;
 }

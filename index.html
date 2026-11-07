@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="./assets/css/components.css">
   <link rel="stylesheet" href="./assets/css/diagram.css">
   <link rel="stylesheet" href="./assets/css/devices.css">
+  <link rel="stylesheet" href="./assets/css/views.css">
   <link rel="stylesheet" href="./assets/css/responsive.css">
 </head>
 <body>
@@ -175,6 +176,8 @@
                 <div class="seg view-seg" id="viewTabs" role="group" aria-label="视图" data-i18n-aria="viewLabel">
                   <button type="button" class="seg-btn" data-view="pro" aria-pressed="true" data-i18n="proView">专业视图</button>
                   <button type="button" class="seg-btn" data-view="simple" aria-pressed="false" data-i18n="simpleView">简洁视图</button>
+                  <button type="button" class="seg-btn" data-view="meter" aria-pressed="false" data-i18n="meterView">仪表</button>
+                  <button type="button" class="seg-btn" data-view="cuktech" aria-pressed="false" data-i18n="cuktechView">酷态科</button>
                 </div>
                 <button type="button" class="btn btn-soft btn-sm" id="replayBtn" data-i18n="replayFlow">重播功率流</button>
               </div>
@@ -182,6 +185,8 @@
             <div class="flow-content">
               <div class="diagram-wrap" id="diagramWrap" role="group" aria-label="功率流向图"></div>
               <div class="simple-wrap" id="simpleWrap" hidden></div>
+              <div class="meter-wrap" id="meterWrap" hidden></div>
+              <div class="cuktech-wrap" id="cuktechWrap" hidden></div>
             </div>
           </section>
         </div>

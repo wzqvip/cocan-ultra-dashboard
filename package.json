@@ -1,6 +1,6 @@
 {
   "name": "cocan-ultra-dashboard",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Unofficial noncommercial live dashboard for CANDYSIGN AI 小电拼 (CP-02): single or multi-device, App-style power flow, Prometheus + local proxy.",

@@ -172,6 +172,8 @@ function cacheDom() {
   dom.statValue4 = $("#statValue4");
   dom.diagramWrap = $("#diagramWrap");
   dom.simpleWrap = $("#simpleWrap");
+  dom.meterWrap = $("#meterWrap");
+  dom.cuktechWrap = $("#cuktechWrap");
   dom.viewTabs = $("#viewTabs");
   dom.replayBtn = $("#replayBtn");
   dom.flowSub = $("#flowSub");
@@ -1392,6 +1394,343 @@ function renderSimple() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Meter view (Power-Z style 2×2 grid)                                */
+/* ------------------------------------------------------------------ */
+
+function meterMetric(label, value) {
+  const item = document.createElement("div");
+  item.className = "meter-metric";
+  const key = document.createElement("span");
+  key.className = "meter-metric-label";
+  key.textContent = label;
+  const val = document.createElement("b");
+  val.className = "meter-metric-value";
+  val.textContent = value;
+  item.append(key, val);
+  return item;
+}
+
+function renderMeter() {
+  dom.meterWrap.replaceChildren();
+  const devices = sortedDevices();
+  if (devices.length === 0) return;
+  const totals = aggregateTotals();
+  const energy = energyAvailableAll();
+  const budget = Number(totals?.budgetW) || 160 * devices.length;
+  const portCount = Number(totals?.portCount) || 5 * devices.length;
+
+  const summary = document.createElement("div");
+  summary.className = "meter-summary";
+  for (const [label, value] of [
+    [t("totalPower"), fmtWatts(Number(totals?.powerW))],
+    [
+      t("sessionEnergy"),
+      energy && Number.isFinite(Number(totals?.sessionWh)) ? fmtEnergy(Number(totals.sessionWh)) : "—",
+    ],
+    [t("portsLabel"), `${portCount}`],
+    [t("deviceCount"), `${devices.length}`],
+  ]) {
+    const cell = document.createElement("div");
+    cell.className = "meter-summary-item";
+    const key = document.createElement("span");
+    key.className = "meter-summary-label";
+    key.textContent = label;
+    const val = document.createElement("b");
+    val.className = "meter-summary-value";
+    val.textContent = value;
+    cell.append(key, val);
+    summary.append(cell);
+  }
+  dom.meterWrap.append(summary);
+
+  const protocolCounts = new Map();
+  for (const device of devices) {
+    for (const port of device.ports || []) {
+      if (!port.attached) continue;
+      const label = protocolLabel(port);
+      if (!label || label === "—") continue;
+      protocolCounts.set(label, (protocolCounts.get(label) || 0) + 1);
+    }
+  }
+  if (protocolCounts.size) {
+    const strip = document.createElement("div");
+    strip.className = "meter-protocol-strip";
+    for (const [label, count] of [...protocolCounts.entries()].slice(0, 6)) {
+      const chip = document.createElement("span");
+      chip.className = "meter-protocol-chip";
+      chip.textContent = `${label} ×${count}`;
+      strip.append(chip);
+    }
+    dom.meterWrap.append(strip);
+  }
+
+  for (const device of devices) {
+    const group = document.createElement("section");
+    group.className = "meter-device";
+    if (state.multi) {
+      const head = document.createElement("div");
+      head.className = "meter-device-head";
+      const label = document.createElement("span");
+      label.className = "meter-device-label";
+      label.textContent = deviceLabel(device);
+      const name = document.createElement("span");
+      name.className = "meter-device-name";
+      name.textContent = deviceName(device);
+      const total = document.createElement("span");
+      total.className = "meter-device-total";
+      total.textContent = `${fmtWatts(Number(device.totals?.powerW))} · ${t("groupCharging", {
+        n: Number(device.totals?.chargingCount) || 0,
+      })}`;
+      head.append(label, name, total);
+      group.append(head);
+    }
+
+    const grid = document.createElement("div");
+    grid.className = "meter-grid";
+    for (const portId of PORT_IDS) {
+      const port = findPort(device, portId);
+      const globalId = globalIdFor(device, portId);
+      const power = Number(port?.powerW) || 0;
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "meter-card";
+      card.style.setProperty("--pc", portColor(portId));
+      card.setAttribute(
+        "aria-label",
+        `${state.multi ? `${deviceLabel(device)} ` : ""}${port?.name || portName(portId)} ${fmtWatts(power)} ${protocolLabel(port)}`,
+      );
+      card.addEventListener("click", () => openDetail(globalId));
+
+      const head = document.createElement("div");
+      head.className = "meter-card-head";
+      const name = document.createElement("span");
+      name.className = "meter-port";
+      name.textContent = port?.name || portName(portId);
+      const gid = document.createElement("span");
+      gid.className = "meter-gid";
+      gid.textContent = `P${globalId}`;
+      head.append(name, gid);
+
+      const proto = document.createElement("span");
+      proto.className = "meter-proto";
+      proto.textContent = protocolLabel(port);
+
+      const metrics = document.createElement("div");
+      metrics.className = "meter-metrics";
+      metrics.append(
+        meterMetric(t("voltage"), fmtVolts(Number(port?.voltageMv))),
+        meterMetric(t("current"), fmtAmps(Number(port?.currentMa))),
+        meterMetric(t("power"), fmtWatts(power)),
+        meterMetric(
+          t("sessionEnergy"),
+          energy && Number.isFinite(Number(port?.sessionWh))
+            ? fmtEnergy(Number(port.sessionWh))
+            : "—",
+        ),
+      );
+
+      const foot = document.createElement("div");
+      foot.className = "meter-foot";
+      const stateNode = document.createElement("span");
+      stateNode.className = "meter-state";
+      stateNode.dataset.tone = stateTone(port);
+      stateNode.textContent = stateText(port);
+      const time = document.createElement("span");
+      time.className = "meter-time";
+      time.textContent =
+        energy && port?.attached ? fmtDuration(Number(port?.chargingSeconds)) : "—";
+      foot.append(stateNode, time);
+
+      const canvas = document.createElement("canvas");
+      canvas.className = "meter-spark";
+      canvas.setAttribute("aria-hidden", "true");
+      card.append(head, proto, metrics, foot, canvas);
+      grid.append(card);
+
+      window.requestAnimationFrame(() => {
+        const series = storeForDevice(device).series().find((item) => item.id === portId);
+        drawSparkline(canvas, series?.samples || [], portColor(portId));
+      });
+    }
+    group.append(grid);
+    dom.meterWrap.append(group);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* CUKTECH-inspired view                                              */
+/* ------------------------------------------------------------------ */
+
+function ckRing(total, budget) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 120 120");
+  svg.setAttribute("class", "ck-ring");
+  svg.setAttribute("role", "img");
+  const radius = 46;
+  const circumference = 2 * Math.PI * radius;
+  const pct = budget > 0 ? Math.max(0, Math.min(1, total / budget)) : 0;
+
+  const bg = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  bg.setAttribute("cx", "60");
+  bg.setAttribute("cy", "60");
+  bg.setAttribute("r", String(radius));
+  bg.setAttribute("class", "ck-ring-bg");
+
+  const value = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  value.setAttribute("cx", "60");
+  value.setAttribute("cy", "60");
+  value.setAttribute("r", String(radius));
+  value.setAttribute("class", "ck-ring-value");
+  value.setAttribute("stroke-dasharray", String(circumference));
+  value.setAttribute("stroke-dashoffset", String(circumference * (1 - pct)));
+  value.setAttribute("transform", "rotate(-90 60 60)");
+
+  const num = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  num.setAttribute("x", "60");
+  num.setAttribute("y", "62");
+  num.setAttribute("text-anchor", "middle");
+  num.setAttribute("class", "ck-ring-num");
+  num.textContent = powerParts(total);
+  const unit = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  unit.setAttribute("x", "60");
+  unit.setAttribute("y", "80");
+  unit.setAttribute("text-anchor", "middle");
+  unit.setAttribute("class", "ck-ring-unit");
+  unit.textContent = "W";
+  svg.append(bg, value, num, unit);
+  return svg;
+}
+
+function renderCuktech() {
+  dom.cuktechWrap.replaceChildren();
+  const devices = sortedDevices();
+  if (devices.length === 0) return;
+  const totals = aggregateTotals();
+  const energy = energyAvailableAll();
+  const budget = Number(totals?.budgetW) || 160 * devices.length;
+  const total = Number(totals?.powerW) || 0;
+  const vin = inputVoltageAverage();
+
+  const hero = document.createElement("div");
+  hero.className = "ck-hero";
+  hero.append(ckRing(total, budget));
+  const info = document.createElement("div");
+  info.className = "ck-hero-info";
+  const kicker = document.createElement("span");
+  kicker.className = "ck-kicker";
+  kicker.textContent = t("ckStyle");
+  const title = document.createElement("b");
+  title.className = "ck-title";
+  title.textContent = t("totalPower");
+  const stats = document.createElement("div");
+  stats.className = "ck-stats";
+  for (const [label, value] of [
+    [
+      t("sessionEnergy"),
+      energy && Number.isFinite(Number(totals?.sessionWh)) ? fmtEnergy(Number(totals.sessionWh)) : "—",
+    ],
+    [t("deviceCount"), `${devices.length}`],
+    [t("portsLabel"), `${Number(totals?.portCount) || 5 * devices.length}`],
+    [
+      t("inputVoltage"),
+      Number(vin) > 0 ? `${Number(vin).toFixed(2)} V` : "—",
+    ],
+  ]) {
+    const cell = document.createElement("div");
+    cell.className = "ck-stat";
+    const k = document.createElement("span");
+    k.textContent = label;
+    const v = document.createElement("b");
+    v.textContent = value;
+    cell.append(k, v);
+    stats.append(cell);
+  }
+  info.append(kicker, title, stats);
+  hero.append(info);
+  dom.cuktechWrap.append(hero);
+
+  for (const device of devices) {
+    const section = document.createElement("section");
+    section.className = "ck-device";
+    const head = document.createElement("div");
+    head.className = "ck-device-head";
+    const label = document.createElement("span");
+    label.className = "ck-device-label";
+    label.textContent = deviceLabel(device);
+    const name = document.createElement("span");
+    name.className = "ck-device-name";
+    name.textContent = deviceName(device);
+    const totalNode = document.createElement("span");
+    totalNode.className = "ck-device-total";
+    totalNode.textContent = fmtWatts(Number(device.totals?.powerW));
+    head.append(label, name, totalNode);
+    section.append(head);
+
+    const grid = document.createElement("div");
+    grid.className = "ck-ports";
+    for (const portId of PORT_IDS) {
+      const port = findPort(device, portId);
+      const globalId = globalIdFor(device, portId);
+      const power = Number(port?.powerW) || 0;
+      const capability = portCapability(device, portId);
+      const pct = capability > 0 ? Math.max(0, Math.min(100, (power / capability) * 100)) : 0;
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "ck-port";
+      card.style.setProperty("--pc", portColor(portId));
+      card.setAttribute(
+        "aria-label",
+        `${state.multi ? `${deviceLabel(device)} ` : ""}${port?.name || portName(portId)} ${fmtWatts(power)} ${protocolLabel(port)}`,
+      );
+      card.addEventListener("click", () => openDetail(globalId));
+
+      const top = document.createElement("div");
+      top.className = "ck-port-top";
+      const portName = document.createElement("span");
+      portName.className = "ck-port-name";
+      portName.textContent = port?.name || portName(portId);
+      const proto = document.createElement("span");
+      proto.className = "ck-proto";
+      proto.textContent = protocolLabel(port);
+      top.append(portName, proto);
+
+      const big = document.createElement("div");
+      big.className = "ck-power";
+      big.textContent = powerParts(power);
+      const unit = document.createElement("span");
+      unit.textContent = " W";
+      big.append(unit);
+
+      const meta = document.createElement("div");
+      meta.className = "ck-meta";
+      meta.textContent = `${fmtVolts(Number(port?.voltageMv))} · ${fmtAmps(Number(port?.currentMa))}`;
+
+      const bar = document.createElement("div");
+      bar.className = "ck-bar";
+      const fill = document.createElement("span");
+      fill.style.width = `${pct}%`;
+      bar.append(fill);
+
+      const foot = document.createElement("div");
+      foot.className = "ck-foot";
+      const stateNode = document.createElement("span");
+      stateNode.textContent = stateText(port);
+      const wh = document.createElement("span");
+      wh.textContent =
+        energy && Number.isFinite(Number(port?.sessionWh))
+          ? fmtEnergy(Number(port.sessionWh))
+          : "—";
+      foot.append(stateNode, wh);
+
+      card.append(top, big, meta, bar, foot);
+      grid.append(card);
+    }
+    section.append(grid);
+    dom.cuktechWrap.append(section);
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Pro view diagrams                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -1482,7 +1821,7 @@ function replayFlow() {
 /* ------------------------------------------------------------------ */
 
 function setView(view) {
-  if (view !== "pro" && view !== "simple") return;
+  if (!["pro", "simple", "meter", "cuktech"].includes(view)) return;
   state.view = view;
   saveSettings({ view });
   state.settings = effectiveSettings();
@@ -1490,20 +1829,32 @@ function setView(view) {
 }
 
 function renderFlow() {
-  const pro = state.view !== "simple";
+  const view = state.view;
+  const pro = view === "pro";
+  const simple = view === "simple";
+  const meter = view === "meter";
+  const cuktech = view === "cuktech";
   dom.replayBtn.hidden = !pro;
   dom.diagramWrap.hidden = !pro;
-  dom.simpleWrap.hidden = pro;
-  dom.flowSub.textContent = t(pro ? "flowSub" : "flowSubSimple");
+  dom.simpleWrap.hidden = !simple;
+  dom.meterWrap.hidden = !meter;
+  dom.cuktechWrap.hidden = !cuktech;
+  const subKey = pro
+    ? "flowSub"
+    : simple
+      ? "flowSubSimple"
+      : meter
+        ? "flowSubMeter"
+        : "flowSubCuktech";
+  dom.flowSub.textContent = t(subKey);
   for (const button of dom.viewTabs.querySelectorAll(".seg-btn")) {
     button.setAttribute("aria-pressed", String(button.dataset.view === state.view));
   }
-  if (pro) {
-    renderDiagrams();
-  } else {
-    destroyDiagrams();
-    renderSimple();
-  }
+  if (pro) renderDiagrams();
+  else destroyDiagrams();
+  if (simple) renderSimple();
+  if (meter) renderMeter();
+  if (cuktech) renderCuktech();
 }
 
 /* ------------------------------------------------------------------ */
@@ -2772,7 +3123,9 @@ function boot() {
   state.demoCount = state.settings.demoDevices || 1;
   state.multi = state.demo ? state.demoCount > 1 : isLiveMulti();
   state.range = RANGES[state.settings.window] ? state.settings.window : "30m";
-  state.view = state.settings.view === "simple" ? "simple" : "pro";
+  state.view = ["pro", "simple", "meter", "cuktech"].includes(state.settings.view)
+    ? state.settings.view
+    : "pro";
 
   setLang(state.settings.lang);
   applyTheme(state.settings.theme);

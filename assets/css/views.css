@@ -1,0 +1,568 @@
+/* ------------------------------------------------------------------ */
+/* Extra power views: Meter (Power-Z-style 2×2) + CUKTECH-inspired     */
+/* ------------------------------------------------------------------ */
+
+.view-seg {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.view-seg .seg-btn {
+  padding-inline: 9px;
+  font-size: 11px;
+}
+
+/* ── Meter / Power-Z style ─────────────────────────────────────────── */
+
+.meter-wrap {
+  display: grid;
+  gap: 14px;
+  padding-top: 2px;
+}
+
+.meter-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.meter-summary-item {
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+}
+
+.meter-summary-label {
+  display: block;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.meter-summary-value {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 17px;
+  color: var(--text);
+}
+
+.meter-protocol-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.meter-protocol-chip {
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--text-2);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.meter-device {
+  display: grid;
+  gap: 8px;
+}
+
+.meter-device-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 2px 0;
+  font-size: 11px;
+}
+
+.meter-device-label {
+  color: var(--text-3);
+  font-weight: 650;
+}
+
+.meter-device-name {
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meter-device-total {
+  margin-left: auto;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.meter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.meter-card {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease,
+    background 160ms ease;
+}
+
+.meter-card::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--pc);
+  content: "";
+  opacity: 0.75;
+}
+
+.meter-card:hover {
+  border-color: color-mix(in srgb, var(--pc) 50%, var(--line));
+  background: color-mix(in srgb, var(--pc) 5%, var(--surface-2));
+  transform: translateY(-1px);
+}
+
+.meter-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.meter-port {
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+}
+
+.meter-gid {
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: 9px;
+}
+
+.meter-proto {
+  display: block;
+  overflow: hidden;
+  margin-top: 1px;
+  color: var(--text-3);
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meter-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.meter-metric {
+  min-width: 0;
+  padding: 5px 7px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+}
+
+.meter-metric-label {
+  display: block;
+  color: var(--text-3);
+  font-size: 9px;
+}
+
+.meter-metric-value {
+  display: block;
+  overflow: hidden;
+  margin-top: 1px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meter-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 6px;
+  color: var(--text-3);
+  font-size: 9px;
+}
+
+.meter-state[data-tone="charging"] {
+  color: var(--good);
+}
+
+.meter-state[data-tone="attached"] {
+  color: var(--accent);
+}
+
+.meter-spark {
+  display: block;
+  width: 100%;
+  height: 24px;
+  margin-top: 3px;
+  opacity: 0.85;
+}
+
+/* ── CUKTECH-inspired view ─────────────────────────────────────────── */
+
+.cuktech-wrap {
+  --ck-bg: #070b10;
+  --ck-panel: #0c131b;
+  --ck-line: rgba(120, 210, 255, 0.16);
+  --ck-cyan: #5ee7ff;
+  --ck-text: #e6f7ff;
+  --ck-muted: #7d9aac;
+  position: relative;
+  display: grid;
+  gap: 14px;
+  overflow: hidden;
+  padding: 16px;
+  border-radius: 18px;
+  background:
+    linear-gradient(rgba(94, 231, 255, 0.035) 1px, transparent 1px) 0 0 / 100% 22px,
+    linear-gradient(90deg, rgba(94, 231, 255, 0.035) 1px, transparent 1px) 0 0 / 22px 100%,
+    radial-gradient(90% 120% at 12% 0%, rgba(28, 114, 160, 0.25), transparent 60%),
+    var(--ck-bg);
+  color: var(--ck-text);
+}
+
+.cuktech-wrap::after {
+  position: absolute;
+  top: -80px;
+  right: -60px;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(94, 231, 255, 0.14), transparent 68%);
+  content: "";
+  pointer-events: none;
+}
+
+.ck-hero {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.ck-ring {
+  width: 132px;
+  height: 132px;
+  filter: drop-shadow(0 0 12px rgba(94, 231, 255, 0.22));
+}
+
+.ck-ring-bg {
+  fill: none;
+  stroke: rgba(94, 231, 255, 0.13);
+  stroke-width: 7;
+}
+
+.ck-ring-value {
+  fill: none;
+  stroke: var(--ck-cyan);
+  stroke-linecap: round;
+  stroke-width: 7;
+  transition: stroke-dashoffset 500ms ease;
+}
+
+.ck-ring-num {
+  fill: var(--ck-text);
+  font-family: var(--mono);
+  font-size: 25px;
+  font-weight: 700;
+}
+
+.ck-ring-unit {
+  fill: var(--ck-cyan);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.ck-hero-info {
+  min-width: 0;
+}
+
+.ck-kicker {
+  display: block;
+  color: var(--ck-cyan);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.ck-title {
+  display: block;
+  margin: 2px 0 8px;
+  color: var(--ck-text);
+  font-size: 21px;
+  font-weight: 650;
+}
+
+.ck-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ck-stat {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--ck-line);
+  border-radius: 9px;
+  background: rgba(10, 24, 34, 0.72);
+}
+
+.ck-stat span {
+  display: block;
+  color: var(--ck-muted);
+  font-size: 9px;
+}
+
+.ck-stat b {
+  display: block;
+  overflow: hidden;
+  color: var(--ck-text);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ck-device {
+  border-top: 1px solid var(--ck-line);
+  padding-top: 12px;
+}
+
+.ck-device-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  font-size: 10.5px;
+}
+
+.ck-device-label {
+  color: var(--ck-cyan);
+  font-weight: 700;
+}
+
+.ck-device-name {
+  overflow: hidden;
+  color: var(--ck-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ck-device-total {
+  margin-left: auto;
+  color: var(--ck-cyan);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.ck-ports {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ck-port {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  padding: 9px 9px 8px;
+  border: 1px solid var(--ck-line);
+  border-radius: 11px;
+  background: linear-gradient(160deg, rgba(16, 36, 50, 0.92), rgba(7, 13, 19, 0.96));
+  color: var(--ck-text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.ck-port::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--pc);
+  content: "";
+  opacity: 0.85;
+}
+
+.ck-port:hover {
+  border-color: rgba(94, 231, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+.ck-port-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.ck-port-name {
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.ck-proto {
+  overflow: hidden;
+  max-width: 62%;
+  padding: 1px 5px;
+  border: 1px solid rgba(94, 231, 255, 0.2);
+  border-radius: 999px;
+  color: var(--ck-cyan);
+  font-size: 8.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ck-power {
+  margin-top: 5px;
+  color: var(--ck-cyan);
+  font-family: var(--mono);
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ck-power span {
+  color: var(--ck-muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.ck-meta {
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--ck-muted);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ck-bar {
+  overflow: hidden;
+  height: 3px;
+  margin-top: 7px;
+  border-radius: 99px;
+  background: rgba(94, 231, 255, 0.12);
+}
+
+.ck-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--ck-cyan), var(--pc));
+  transition: width 400ms ease;
+}
+
+.ck-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 5px;
+  color: var(--ck-muted);
+  font-size: 8.5px;
+}
+
+/* ── responsive ───────────────────────────────────────────────────── */
+
+@media (max-width: 1180px) {
+  .meter-grid,
+  .ck-ports {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .meter-grid,
+  .ck-ports {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .meter-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .meter-grid,
+  .ck-ports {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .meter-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ck-hero {
+    grid-template-columns: 108px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .ck-ring {
+    width: 108px;
+    height: 108px;
+  }
+
+  .ck-title {
+    font-size: 17px;
+  }
+
+  .view-seg {
+    justify-content: flex-start;
+  }
+
+  .view-seg .seg-btn {
+    padding-inline: 7px;
+    font-size: 10.5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meter-card,
+  .ck-port,
+  .ck-bar span,
+  .ck-ring-value {
+    transition: none;
+  }
+}
