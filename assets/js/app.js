@@ -229,6 +229,7 @@ function cacheDom() {
   dom.deviceModeTabs = $("#deviceModeTabs");
   dom.deviceModeHint = $("#deviceModeHint");
   dom.savedDeviceList = $("#savedDeviceList");
+  dom.savedSectionTitle = $("#savedSectionTitle");
   dom.savedCount = $("#savedCount");
   dom.deviceScanBtn = $("#deviceScanBtn");
   dom.deviceScanStatus = $("#deviceScanStatus");
@@ -685,19 +686,23 @@ function urlWithDemo(count = 1) {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
-function urlWithoutDemo() {
+/**
+ * Leave demo mode for real data.
+ * On GitHub Pages, removing ?demo is not enough: the page is still a demo
+ * location. Switch to the local proxy mode (?local=1) explicitly.
+ */
+function urlForRealMode() {
   const url = new URL(location.href);
-  url.searchParams.delete("demo");
-  url.searchParams.delete("demoDevices");
-  return `${url.pathname}${url.search}${url.hash}`;
-}
-
-function urlWithLocal() {
-  const url = new URL(location.href);
-  url.searchParams.set("local", "1");
   url.searchParams.delete("demo");
   url.searchParams.delete("demoDevices");
   url.searchParams.delete("multi");
+  if (
+    /(^|\.)github\.io$/i.test(location.hostname) &&
+    !url.searchParams.get("local") &&
+    !url.searchParams.get("api")
+  ) {
+    url.searchParams.set("local", "1");
+  }
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
@@ -838,9 +843,8 @@ function renderBanners() {
   if (state.demo) {
     const count = state.devices.length || state.demoCount;
     const actions = [];
-    actions.push({ label: t("connectLocal"), href: urlWithLocal() });
+    actions.push({ label: t("useRealDevice"), href: urlForRealMode() });
     if (getUrlOverrides().demo) {
-      actions.push({ label: t("demoExit"), href: urlWithoutDemo() });
       actions.push(
         count > 1
           ? { label: t("demoOne"), href: urlWithDemo(1) }
@@ -2408,12 +2412,15 @@ function renderDeviceDialog() {
     button.setAttribute("aria-pressed", String(button.dataset.mode === state.deviceDialogMode));
   }
   const list = deviceDialogVisibleList();
+  const headingKey = demo ? "demoDevicesHeading" : "savedDevices";
+  dom.savedSectionTitle.dataset.i18n = headingKey;
+  dom.savedSectionTitle.textContent = t(headingKey);
   dom.deviceModeHint.textContent = multi
     ? t("multiHint")
     : savedDevices().length < 2 && !demo
       ? t("multiDisabled")
       : "";
-  dom.savedCount.textContent = `${list.length}`;
+  dom.savedCount.textContent = demo ? t("demoBadge") : `${list.length}`;
   dom.deviceApplyMulti.hidden = demo || !multi;
   dom.deviceApplyMulti.disabled = state.multiDraft.size < 2;
   dom.savedDeviceList.replaceChildren();
@@ -2459,6 +2466,12 @@ function renderDeviceDialog() {
       tier.textContent = device.model === "ultra" ? "Ultra" : "Pro";
       name.append(tier);
     }
+    if (demo) {
+      const badge = document.createElement("span");
+      badge.className = "device-demo-badge";
+      badge.textContent = t("demoBadge");
+      name.append(badge);
+    }
     const meta = document.createElement("p");
     meta.className = "device-meta";
     meta.textContent = [
@@ -2471,12 +2484,20 @@ function renderDeviceDialog() {
     main.append(name, meta);
     row.append(main);
 
-    if (!demo && !multi) {
+    if (demo) {
+      const real = document.createElement("a");
+      real.className = "btn btn-soft btn-sm device-real";
+      real.href = urlForRealMode();
+      real.textContent = t("realDeviceShort");
+      real.title = t("useRealDevice");
+      row.append(real);
+    } else {
       const use = document.createElement("button");
       use.type = "button";
       use.className = "btn btn-soft btn-sm";
-      use.textContent = activeHost === device.host ? t("selectedDevice") : t("selectDevice");
-      use.disabled = activeHost === device.host;
+      const isCurrent = !multi && activeHost === device.host;
+      use.textContent = isCurrent ? t("selectedDevice") : t("selectDevice");
+      use.disabled = isCurrent;
       use.addEventListener("click", () => {
         setActiveDevice(device.host);
         state.settings = effectiveSettings();

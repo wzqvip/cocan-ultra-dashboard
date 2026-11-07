@@ -72,7 +72,7 @@ Pages (HTTPS) ──fetch──► http://127.0.0.1:8787/api/snapshot ──HTTP
    node server.mjs --host cp02-<PSN>.local
    ```
    终端会打印实际端口（默认 8787，被占用会自动顺延）。
-2. 打开 Pages 页面，点击演示横幅里的 **「连接本地设备」**，或直接访问：
+2. 打开 Pages 页面，点击演示横幅里的 **「使用真实设备」**，或直接访问：
    ```text
    https://wzqvip.github.io/cocan-ultra-dashboard/?local=1
    ```
@@ -124,7 +124,10 @@ Chrome 权限弹窗本身不能替代 CORS；不要指望点“允许”后 Page
   - `curl -H "Origin: https://wzqvip.github.io" /api/health` 返回
     `access-control-allow-origin: https://wzqvip.github.io`；
   - `OPTIONS /api/snapshot` 返回 204。
-- 页面支持 `?local=1` / `?api=<url>`，并在演示横幅提供“连接本地设备”入口。
+- 页面支持 `?local=1` / `?api=<url>`，并在演示横幅提供“使用真实设备”入口；
+  Pages 上会显式跳 `?local=1`，不会只是删掉 demo 参数后仍停留在演示。
+- 设备弹窗里演示设备标为“演示设备（未保存）”，每行“真实设备”按钮同样用于切回真实模式；
+  真实设备行有“选择 / 已选择”。
 - **本地同源模式已验证可读真机**（`http://127.0.0.1:8787/?local=1`，状态“实时”）。
 - **Pages 跨域路径已验证**：在允许本地网络的测试 Chrome 中，Pages `?local=1` 通过
   `127.0.0.1:8787` 成功读到真机；正常 Chrome 首次请求/点“重试”会触发 LNA 权限弹窗。

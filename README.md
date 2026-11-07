@@ -38,7 +38,7 @@ GitHub Pages 上已经编译部署好的在线网页（点击图片或下面链�
    ```bash
    node server.mjs --host cp02-<PSN>.local
    ```
-2. 打开 Pages，点演示横幅里的 **「连接本地设备」**，或访问：
+2. 打开 Pages，点演示横幅里的 **「使用真实设备」**，或访问：
    ```text
    https://wzqvip.github.io/cocan-ultra-dashboard/?local=1
    ```
@@ -47,6 +47,16 @@ GitHub Pages 上已经编译部署好的在线网页（点击图片或下面链�
 页面会通过 `http://127.0.0.1:8787` 读真机；代理端口不是 8787 时用
 `?api=http://127.0.0.1:<port>`。Chrome 的权限弹窗只解决混合内容/本地网络，
 **不绕过设备 CORS**；详见 [docs/LOCAL-CONNECTION.md](docs/LOCAL-CONNECTION.md)。
+
+### 演示模式与真实模式
+
+- **GitHub Pages 默认是演示模式**。点演示横幅里的 **「使用真实设备」** 会跳到
+  `?local=1`（不是单纯删掉 `?demo`，否则 github.io 仍会回到演示）。
+- 本地用 `node server.mjs` 打开时，同一个按钮会直接退出演示并读真实设备。
+- 设备弹窗里演示设备标题是 **“演示设备（未保存）”**，不会冒充已保存设备；
+  每行的 **「真实设备」** 按钮就是切回真实模式。
+- 真实设备每行右侧有 **「选择 / 已选择」**；多台模式也有「选择」按钮，可直接切回单台查看。
+- Pages 切真实模式仍需要本机 `server.mjs` 代理；没有代理时会显示“本地代理模式”提示。
 
 | 竖屏（2 台演示） | 横屏（2 台演示） |
 | --- | --- |
@@ -148,7 +158,8 @@ Ultra 多了 Premium Kit、状态屏颜色和 SKU 权益；**龙虾服务 / MCP 
 - **主题与语言**：浅色 / 深色（跟随系统或手动切换）；中文 / English。
 - **数据源可切换**：自动 / `metrics.json` / Prometheus `/metrics`；Prometheus 模式会明确标注
   「不提供充电时长与累计电量」。
-- **演示模式**：`?demo=1` … `?demo=6` 演示 1–6 台（2 台即 P0–P9）；GitHub Pages 自动演示。
+- **演示模式**：`?demo=1` … `?demo=6` 演示 1–6 台（2 台即 P0–P9）；GitHub Pages 自动演示，
+  演示设备标为“演示设备（未保存）”，可一键切回真实模式。
 - **无构建、无 npm 依赖、无 CDN**：原生 HTML/CSS/ES Modules，直接跑。
 
 ## 快速开始
@@ -316,10 +327,10 @@ ionbridge_uptime_seconds
 总功率、预算（160 W × 在线台数）、在充数、本次电量都会汇总；某台掉线时其余设备继续显示。
 
 <p align="center">
-  <img src="docs/screenshots/devices.png" alt="设备弹窗：单台/多台、扫描局域网、手动添加" width="300">
+  <img src="docs/screenshots/devices.png" alt="设备弹窗：演示设备未保存、真实设备按钮、单台/多台、扫描" width="300">
 </p>
 
-<p align="center"><sub>设备弹窗：单台 / 多台、扫描局域网、手动添加；模式控制类功能需 MCP，只读看板不伪造。</sub></p>
+<p align="center"><sub>设备弹窗：演示设备明确标为“未保存”，每行右侧可切「真实设备」；真实设备行有「选择 / 已选择」；支持单台 / 多台、扫描、手动添加。</sub></p>
 
 [查看完整多台截图（390 × 2915）](docs/screenshots/multi.png)
 
@@ -454,7 +465,7 @@ curl "http://127.0.0.1:8787/api/multi?hosts=host1,host2"
 | `无法连接设备（连接超时）` | 确认电脑与充电器在同一 2.4G Wi-Fi；先用浏览器打开 `http://<IP>/metrics.json` |
 | `.local` 打不开 | 安装 Bonjour，或直接用路由器里看到的 IP |
 | 端口被占用 | 换 `--port 8790`；默认会自动顺延并打印实际端口 |
-| 页面显示「演示数据」 | 你在 GitHub Pages 或用 `?demo=1` / `?demo=2` 打开；本地 `http://127.0.0.1` 才是真机 |
+| 页面显示「演示数据」 | Pages 默认演示；点「使用真实设备」→ `?local=1` 并启动本机 `server.mjs`；本地 `http://127.0.0.1` 直接退出演示即可 |
 | 多台只显示一台 | 设备弹窗切到「多台」，勾选至少 2 台；单台离线时其余继续显示并提示 |
 | 只有 Prometheus 模式 | 设置里切回「自动」；Prometheus 不提供时长/电量 |
 | 手机打不开 | 用 `--lan` 启动，并允许 Windows 防火墙的专用网络访问 |

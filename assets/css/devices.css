@@ -627,6 +627,29 @@
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
+.device-demo-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--text-3);
+  background: color-mix(in srgb, var(--text-3) 13%, transparent);
+  font-size: 9.5px;
+  font-weight: 650;
+  line-height: 1.5;
+  vertical-align: 1px;
+}
+
+.device-row .device-real {
+  flex: none;
+  padding-inline: 8px;
+  white-space: nowrap;
+}
+
+.device-row .btn-sm {
+  flex: none;
+}
+
 .device-meta {
   font-size: 10.5px;
   color: var(--text-3);
