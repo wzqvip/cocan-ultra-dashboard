@@ -913,10 +913,13 @@ function renderHeader() {
   const fw = device.esp32Version || primary?.system?.appVersion;
   dom.fwVersion.textContent = fw ? String(fw) : "—";
   const psn = device.psn;
+  const psnKey = dom.psnText.previousElementSibling;
   if (state.multi) {
+    if (psnKey) psnKey.textContent = t("deviceCount");
     dom.psnText.textContent = t("multiBadge", { n: state.devices.length || totalDeviceCount() });
     dom.psnText.title = "";
   } else {
+    if (psnKey) psnKey.textContent = t("labelPsn");
     dom.psnText.textContent = state.demo ? psn || "—" : maskPsn(psn);
     dom.psnText.title = state.demo ? String(psn || "") : t("labelPsn");
   }
