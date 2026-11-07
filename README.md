@@ -25,6 +25,7 @@ GitHub Pages 上已经编译部署好的在线网页（点击图片或下面链�
 - [打开在线看板](https://wzqvip.github.io/cocan-ultra-dashboard/)
 - [直接看双设备演示（P0–P9）](https://wzqvip.github.io/cocan-ultra-dashboard/?demo=2)
 - [直接看六设备演示（P0–P29）](https://wzqvip.github.io/cocan-ultra-dashboard/?demo=6)
+- [连接本地设备（需 Chrome 本地网络权限 + 本机代理）](https://wzqvip.github.io/cocan-ultra-dashboard/?local=1)
 - [GitHub 仓库](https://github.com/wzqvip/cocan-ultra-dashboard)
 
 > Pages 上是**演示模式**。Chrome 142+ 可以弹出“访问本地网络”权限，但设备的 HTTP 服务
@@ -41,7 +42,7 @@ GitHub Pages 上已经编译部署好的在线网页（点击图片或下面链�
    ```text
    https://wzqvip.github.io/cocan-ultra-dashboard/?local=1
    ```
-3. Chrome 询问本地网络权限时点 **允许**。
+3. Chrome 询问本地网络权限时点 **允许**；如果首次自动连接没有弹窗，点页面上的 **重试** 触发权限请求。
 
 页面会通过 `http://127.0.0.1:8787` 读真机；代理端口不是 8787 时用
 `?api=http://127.0.0.1:<port>`。Chrome 的权限弹窗只解决混合内容/本地网络，

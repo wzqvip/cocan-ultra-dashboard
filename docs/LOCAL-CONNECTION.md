@@ -121,7 +121,12 @@ Chrome 权限弹窗本身不能替代 CORS；不要指望点“允许”后 Page
 ## 5. 已实现与验证
 
 - `server.mjs` 的 `/api/*` 已支持 `OPTIONS` 和 CORS 白名单。
+  - `curl -H "Origin: https://wzqvip.github.io" /api/health` 返回
+    `access-control-allow-origin: https://wzqvip.github.io`；
+  - `OPTIONS /api/snapshot` 返回 204。
 - 页面支持 `?local=1` / `?api=<url>`，并在演示横幅提供“连接本地设备”入口。
-- 本地同源模式已验证可读真机；Pages 跨域模式需要 Chrome 142+ 的 LNA 权限，且本机代理
-  必须运行。
+- **本地同源模式已验证可读真机**（`http://127.0.0.1:8787/?local=1`，状态“实时”）。
+- **Pages 跨域路径已验证**：在允许本地网络的测试 Chrome 中，Pages `?local=1` 通过
+  `127.0.0.1:8787` 成功读到真机；正常 Chrome 首次请求/点“重试”会触发 LNA 权限弹窗。
+- 未授权时（普通 headless Chrome）请求会被拦截，页面显示“本地代理模式”，不会崩溃。
 - 设备直连仍被 CORS 阻止；这是设备端限制，不是页面代码问题。
