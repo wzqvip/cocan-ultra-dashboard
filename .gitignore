@@ -1,5 +1,7 @@
 # Local/private reference material and device config — never published
 ref/
+vendor/
+metrics-raw.txt
 config.json
 
 # Dependencies and tooling

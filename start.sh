@@ -4,4 +4,4 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-exec node server.mjs
+exec node server.mjs "$@"

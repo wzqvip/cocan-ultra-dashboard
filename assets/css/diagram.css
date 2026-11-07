@@ -1,0 +1,418 @@
+/* ==========================================================================
+   Signature power-flow diagram
+   App-like anatomy: chips → bezier cables → warm-white charger body.
+   ========================================================================== */
+
+.diagram {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  overflow: visible;
+  font-family: var(--font-sans);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.diagram text {
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+}
+
+.grad-body-top {
+  stop-color: var(--device-top);
+}
+
+.grad-body-bottom {
+  stop-color: var(--device-bottom);
+}
+
+/* --------------------------------------------------------------------------
+   Port chips
+   -------------------------------------------------------------------------- */
+
+.chip {
+  cursor: pointer;
+  outline: none;
+}
+
+.chip-box {
+  fill: var(--surface);
+  stroke: color-mix(in srgb, var(--pc) 30%, var(--line));
+  stroke-width: 1;
+  transition: stroke 0.18s ease, fill 0.18s ease;
+}
+
+.chip:hover .chip-box {
+  stroke: color-mix(in srgb, var(--pc) 70%, transparent);
+}
+
+.chip.is-idle .chip-box {
+  fill: var(--surface-2);
+  stroke: var(--line-2);
+}
+
+.chip.is-off .chip-box {
+  fill: var(--surface-2);
+  stroke: var(--line);
+}
+
+.chip.is-selected .chip-box,
+.chip.is-focused .chip-box {
+  stroke: var(--pc);
+  stroke-width: 2.2;
+  filter: drop-shadow(0 2px 6px color-mix(in srgb, var(--pc) 34%, transparent));
+}
+
+.chip-accent {
+  fill: var(--pc);
+  opacity: 0.9;
+  transition: opacity 0.18s ease;
+}
+
+.chip.is-idle .chip-accent {
+  fill: var(--line-2);
+}
+
+.chip.is-off .chip-accent {
+  fill: var(--line);
+}
+
+.chip-dot {
+  fill: var(--pc);
+  opacity: 0.9;
+}
+
+.chip.is-idle .chip-dot {
+  fill: var(--text-3);
+  opacity: 0.4;
+}
+
+.chip-name {
+  fill: var(--text);
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.chip-pwr {
+  fill: var(--text);
+  font-weight: 720;
+  letter-spacing: -0.02em;
+}
+
+.chip-unit {
+  fill: var(--text-3);
+  font-weight: 600;
+}
+
+.chip-detail {
+  fill: var(--text-3);
+  font-weight: 500;
+}
+
+.chip.is-idle .chip-name,
+.chip.is-idle .chip-pwr,
+.chip.is-off .chip-name,
+.chip.is-off .chip-pwr {
+  fill: var(--text-3);
+}
+
+.chip.is-idle .chip-detail,
+.chip.is-off .chip-detail {
+  fill: var(--text-3);
+  opacity: 0.85;
+}
+
+/* Mode-specific type sizes (viewBox units == CSS px at rendered width) */
+.diagram.mode-roomy .chip-name {
+  font-size: 11px;
+}
+.diagram.mode-roomy .chip-pwr {
+  font-size: 17px;
+}
+.diagram.mode-roomy .chip-unit {
+  font-size: 9px;
+}
+.diagram.mode-roomy .chip-detail {
+  font-size: 8.5px;
+}
+
+.diagram.mode-compact .chip-name {
+  font-size: 11px;
+}
+.diagram.mode-compact .chip-pwr {
+  font-size: 16px;
+}
+.diagram.mode-compact .chip-unit {
+  font-size: 8.5px;
+}
+.diagram.mode-compact .chip-detail {
+  font-size: 8.5px;
+}
+
+.diagram.mode-squash .chip-name {
+  font-size: 9.5px;
+}
+.diagram.mode-squash .chip-pwr {
+  font-size: 12.5px;
+}
+.diagram.mode-squash .chip-unit {
+  font-size: 7px;
+}
+.diagram.mode-squash .chip-detail {
+  display: none;
+}
+
+/* --------------------------------------------------------------------------
+   Cables
+   -------------------------------------------------------------------------- */
+
+.cable-under {
+  fill: none;
+  stroke: var(--pc);
+  opacity: 0.12;
+  stroke-linecap: round;
+}
+
+.cable-main {
+  fill: none;
+  stroke: var(--pc);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  opacity: 0.95;
+  transition: stroke 0.2s ease, opacity 0.2s ease;
+}
+
+.cable-dash {
+  fill: none;
+  stroke: #ffffff;
+  stroke-opacity: 0.62;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: 2 12;
+  opacity: 0;
+}
+
+.cable.is-charging .cable-dash {
+  opacity: 1;
+  animation: pd-flow 1.2s linear infinite;
+}
+
+.cable.is-idle .cable-under {
+  opacity: 0;
+}
+
+.cable.is-idle .cable-main {
+  stroke: var(--line-2);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 5;
+  opacity: 1;
+}
+
+.cable.is-attached .cable-main {
+  opacity: 0.55;
+}
+
+.cable.is-attached .cable-under {
+  opacity: 0.08;
+}
+
+@keyframes pd-flow {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+
+.diagram.mode-roomy .cable-under {
+  stroke-width: 7;
+}
+
+.diagram.mode-compact .cable-under {
+  stroke-width: 5;
+}
+
+.diagram.mode-squash .cable-under {
+  stroke-width: 4;
+}
+
+.diagram.mode-compact .cable-main {
+  stroke-width: 1.8;
+}
+
+.diagram.mode-squash .cable-main {
+  stroke-width: 1.5;
+}
+
+.diagram.mode-squash .cable-dash {
+  stroke-width: 1.2;
+  stroke-dasharray: 2 10;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cable.is-charging .cable-dash {
+    animation: none !important;
+    opacity: 1;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Charger body
+   -------------------------------------------------------------------------- */
+
+.body-rect {
+  fill: url(#flowBodyGrad);
+  stroke: var(--device-edge);
+  stroke-width: 1;
+  filter: drop-shadow(0 7px 6px rgba(44, 30, 12, 0.16));
+}
+
+[data-theme="dark"] .body-rect {
+  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.5));
+}
+
+.body-brand {
+  fill: rgba(92, 76, 50, 0.5);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.screen-rect {
+  fill: #121212;
+}
+
+.screen-label {
+  fill: rgba(255, 115, 21, 0.62);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.screen-num {
+  fill: #ff7315;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.screen-unit {
+  font-size: 0.6em;
+  font-weight: 700;
+  fill: rgba(255, 115, 21, 0.8);
+}
+
+.slot {
+  fill: #121212;
+  opacity: 0.82;
+}
+
+.budget-card {
+  filter: drop-shadow(0 5px 10px rgba(52, 36, 14, 0.16));
+}
+
+.budget-rect {
+  fill: #fffdf7;
+  stroke: #e5dac4;
+  stroke-width: 1;
+}
+
+.budget-num {
+  fill: #1d1810;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.budget-unit {
+  font-size: 0.58em;
+  font-weight: 700;
+  fill: #8a7656;
+}
+
+.budget-sub {
+  fill: #7d6c4e;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.diagram.mode-roomy .screen-label {
+  font-size: 7px;
+}
+.diagram.mode-roomy .screen-num {
+  font-size: 15px;
+}
+.diagram.mode-roomy .budget-num {
+  font-size: 17px;
+}
+.diagram.mode-roomy .budget-sub {
+  font-size: 8px;
+}
+.diagram.mode-roomy .body-brand {
+  font-size: 6.5px;
+}
+.diagram.mode-roomy .status-detail {
+  font-size: 9.5px;
+}
+
+.diagram.mode-compact .screen-label {
+  font-size: 5.5px;
+}
+.diagram.mode-compact .screen-num {
+  font-size: 12.5px;
+}
+.diagram.mode-compact .budget-num {
+  font-size: 13px;
+}
+.diagram.mode-compact .budget-sub {
+  font-size: 7px;
+}
+.diagram.mode-compact .body-brand {
+  display: none;
+}
+.diagram.mode-compact .status-detail {
+  display: none;
+}
+
+.diagram.mode-squash .screen-label {
+  display: none;
+}
+.diagram.mode-squash .screen-num {
+  font-size: 11px;
+}
+.diagram.mode-squash .budget-num {
+  font-size: 11px;
+}
+.diagram.mode-squash .budget-sub {
+  font-size: 6.5px;
+}
+.diagram.mode-squash .body-brand {
+  display: none;
+}
+.diagram.mode-squash .status-detail {
+  display: none;
+}
+
+.status-detail {
+  fill: var(--text-3);
+  font-weight: 500;
+}
+
+/* Compact budget card is floating over the card background. */
+.diagram.mode-compact .budget-rect,
+.diagram.mode-squash .budget-rect {
+  stroke: var(--line-2);
+}
+
+/* --------------------------------------------------------------------------
+   Ink note (估算 marker used in hero/port stats)
+   -------------------------------------------------------------------------- */
+
+.unit-note {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  vertical-align: 1px;
+}

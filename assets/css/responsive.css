@@ -1,0 +1,587 @@
+/* ==========================================================================
+   Responsive refinements: phones, landscape phones, tablets, desktop
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   General narrow-screen adjustments
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .topbar-meta {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding-top: 10px;
+  }
+
+  .topbar-inner {
+    gap: 8px;
+  }
+
+  .topbar-actions {
+    gap: 2px;
+  }
+
+  .brand-text {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .lang-btn {
+    display: none;
+  }
+
+  .status-pill {
+    padding: 3px 9px 3px 8px;
+    font-size: 11px;
+  }
+
+  .brand-title {
+    font-size: 13px;
+    letter-spacing: -0.03em;
+  }
+
+  .app-shell {
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+  }
+
+  .card {
+    border-radius: 18px;
+    padding: 14px 14px 15px;
+  }
+
+  .chart-canvas-wrap {
+    height: clamp(170px, 28vh, 220px);
+  }
+
+  .pc-num {
+    font-size: 24px;
+  }
+
+  .setup-card {
+    gap: 10px;
+  }
+
+  .setup-mark {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+  }
+
+  .field-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 560px) {
+  .port-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Tile-style port cards once there is room for a sparkline. */
+  .port-btn {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "top"
+      "power"
+      "meta"
+      "foot"
+      "spark";
+    align-items: start;
+    gap: 5px;
+    padding: 12px 13px 14px 15px;
+  }
+
+  .pc-power {
+    justify-content: flex-start;
+  }
+
+  .pc-meta {
+    justify-content: flex-start;
+  }
+
+  .pc-spark {
+    display: block;
+  }
+
+  .pc-foot {
+    margin-top: 2px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Landscape phones (e.g. 844x390, 740x360). Keep total power above the fold.
+   -------------------------------------------------------------------------- */
+
+@media (orientation: landscape) and (max-height: 560px) {
+  body {
+    background-attachment: scroll;
+  }
+
+  .container {
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+  }
+
+  .topbar-inner {
+    min-height: 44px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    gap: 8px;
+  }
+
+  .brand {
+    gap: 7px;
+  }
+
+  .brand-mark {
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+    box-shadow: none;
+  }
+
+  .brand-title {
+    font-size: 14px;
+  }
+
+  .model-chip {
+    display: none;
+  }
+
+  .topbar-meta {
+    display: none;
+  }
+
+  .lang-btn {
+    display: none;
+  }
+
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+  }
+
+  .status-pill {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
+  .app-shell {
+    padding-top: 8px;
+    padding-bottom: calc(12px + var(--safe-b));
+  }
+
+  .banners {
+    padding-top: 6px;
+    gap: 6px;
+  }
+
+  .banner {
+    align-items: center;
+    padding: 6px 10px;
+    font-size: 11.5px;
+    gap: 8px;
+  }
+
+  .banner-body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 8px;
+  }
+
+  .banner-title {
+    white-space: nowrap;
+  }
+
+  .banner-text {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .banner-actions {
+    margin-top: 0;
+    flex: none;
+  }
+
+  .banner-actions .btn {
+    min-height: 26px;
+    padding: 3px 9px;
+  }
+
+  .dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 8px;
+  }
+
+  .dash-grid {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .dash-col {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .dash-left {
+    flex: 1.06 1 0;
+  }
+
+  .dash-right {
+    flex: 0.94 1 0;
+  }
+
+  .dash-extra {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .card {
+    border-radius: 16px;
+    padding: 10px 12px;
+  }
+
+  .hero {
+    grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .hero-head .card-title {
+    font-size: 12px;
+  }
+
+  .hero-fresh {
+    font-size: 9.5px;
+  }
+
+  .hero-value {
+    margin-top: 0;
+  }
+
+  .hero-num {
+    font-size: 36px;
+  }
+
+  .hero-unit {
+    font-size: 15px;
+  }
+
+  .budget {
+    margin-top: 7px;
+  }
+
+  .budget-track {
+    height: 7px;
+  }
+
+  .budget-labels {
+    margin-top: 4px;
+    font-size: 10px;
+  }
+
+  .hero-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .stat {
+    padding: 5px 7px;
+    border-radius: 9px;
+  }
+
+  .stat dt {
+    font-size: 9px;
+    letter-spacing: 0;
+    display: flex;
+    gap: 4px;
+    align-items: baseline;
+  }
+
+  .stat dd {
+    font-size: 12.5px;
+    margin-top: 1px;
+  }
+
+  .diagram-card {
+    padding: 6px 8px 8px;
+  }
+
+  .diagram-card .card-head {
+    display: none;
+  }
+
+  .diagram-wrap {
+    margin: 0;
+  }
+
+  .chart-card {
+    padding: 10px 12px;
+  }
+
+  .chart-card .card-head {
+    margin-bottom: 6px;
+    align-items: center;
+  }
+
+  .chart-title,
+  .chart-card .card-title {
+    font-size: 13px;
+  }
+
+  .chart-card .card-sub {
+    display: none;
+  }
+
+  .chart-canvas-wrap {
+    height: 146px;
+    min-height: 120px;
+  }
+
+  .legend {
+    margin-top: 6px;
+    padding-top: 6px;
+    gap: 0 2px;
+  }
+
+  .legend-btn {
+    font-size: 10.5px;
+    padding: 2px 5px;
+  }
+
+  .ports-card .card-head {
+    margin-bottom: 6px;
+  }
+
+  .ports-card .card-sub {
+    display: none;
+  }
+
+  .port-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .port-btn {
+    padding: 8px 9px 9px 11px;
+    gap: 3px 8px;
+  }
+
+  .pc-num {
+    font-size: 20px;
+  }
+
+  .pc-spark {
+    display: none;
+  }
+
+  .pc-foot {
+    font-size: 9.5px;
+  }
+
+  .system-summary {
+    padding: 9px 12px;
+  }
+
+  .system-card .card-sub {
+    display: none;
+  }
+
+  .sys-body {
+    padding: 0 12px 12px;
+  }
+
+  .setup-card {
+    padding: 10px 12px;
+  }
+
+  .app-footer {
+    padding-top: 8px;
+    font-size: 10.5px;
+  }
+
+  .detail-sheet {
+    max-height: 88dvh;
+  }
+}
+
+/* Very short landscape screens keep the sheet compact. */
+@media (orientation: landscape) and (max-height: 430px) {
+  .hero-num {
+    font-size: 32px;
+  }
+
+  .chart-canvas-wrap {
+    height: 128px;
+    min-height: 108px;
+  }
+
+  .detail-num {
+    font-size: 38px;
+  }
+
+  .detail-power {
+    margin-bottom: 10px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Tablet and desktop spacing polish
+   -------------------------------------------------------------------------- */
+
+@media (min-width: 720px) and (min-height: 561px) {
+  .banner {
+    align-items: center;
+  }
+
+  .banner-body {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px 10px;
+  }
+
+  .banner-title {
+    white-space: nowrap;
+  }
+
+  .banner-actions {
+    margin-top: 0;
+    flex: none;
+  }
+
+  .chart-card .chart-canvas-wrap {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 220px;
+  }
+
+  .port-grid {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  }
+
+  .hero-stats {
+    max-width: 560px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container {
+    padding-left: max(24px, env(safe-area-inset-left, 0px));
+    padding-right: max(24px, env(safe-area-inset-right, 0px));
+  }
+
+  .card {
+    padding: 22px;
+  }
+
+  .hero {
+    padding: 24px;
+  }
+
+  .hero-stats {
+    max-width: none;
+  }
+
+  .port-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Print / unavoidable fallback
+   -------------------------------------------------------------------------- */
+
+@media print {
+  .topbar,
+  .topbar-actions,
+  .chart-card,
+  .banner-actions,
+  .app-footer {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .card {
+    box-shadow: none;
+    break-inside: avoid;
+  }
+}
+/* --------------------------------------------------------------------------
+   Very narrow phones: keep the whole top bar on one row without clipping.
+   (These rules live last so they win over the earlier component tweaks.)
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 430px) {
+  .model-chip .mc-spec {
+    display: none;
+  }
+
+  .container {
+    padding-left: max(10px, env(safe-area-inset-left, 0px));
+    padding-right: max(10px, env(safe-area-inset-right, 0px));
+  }
+
+  .topbar-inner {
+    gap: 6px;
+  }
+
+  .brand {
+    gap: 7px;
+  }
+
+  .brand-mark {
+    width: 32px;
+    height: 32px;
+    border-radius: 11px;
+  }
+
+  .brand-title {
+    font-size: 13px;
+    letter-spacing: -0.03em;
+  }
+
+  .topbar-actions {
+    gap: 0;
+  }
+
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .status-pill {
+    font-size: 10.5px;
+    padding: 3px 8px 3px 7px;
+    gap: 5px;
+  }
+}
+
+@media (max-width: 380px) {
+  .brand-title {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.2;
+  }
+}
