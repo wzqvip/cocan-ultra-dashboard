@@ -489,11 +489,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.on("error", (error) => {
-  console.error(error);
-  process.exit(1);
-});
-
 const bindHost = opts.lan ? "0.0.0.0" : "127.0.0.1";
 
 async function listenWithFallback(startPort, attempts = 24) {
@@ -527,6 +522,11 @@ async function listenWithFallback(startPort, attempts = 24) {
 
 listenWithFallback(opts.port)
   .then((port) => {
+    // Runtime errors after a successful listen are fatal.
+    server.on("error", (error) => {
+      console.error(error);
+      process.exit(1);
+    });
     const lan = opts.lan
       ? Object.values(os.networkInterfaces())
           .flat()
