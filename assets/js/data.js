@@ -158,12 +158,13 @@ export function getUrlOverrides() {
   const params = new URLSearchParams(location.search);
   const multi = params.get("multi") || "";
   const demoRaw = params.get("demo");
-  const demoDevices = Number(params.get("demoDevices") || (demoRaw === "2" ? 2 : 1));
+  const demoCount = Number(params.get("demoDevices") || demoRaw || 1);
+  const demoDevices = Number.isFinite(demoCount) && demoCount > 0 ? Math.min(demoCount, 6) : 1;
   return {
     host: params.get("host") || "",
     mode: params.get("mode") || "",
     demo: demoRaw !== null && demoRaw !== "0",
-    demoDevices: Math.max(1, Math.min(Number.isFinite(demoDevices) ? demoDevices : 1, 6)),
+    demoDevices,
     multiHosts: multi
       .split(",")
       .map((h) => h.trim())

@@ -275,7 +275,7 @@ localhost、`*.local`、`*.lan`），拒绝公网地址，避免代理被当成 
 ## 6. 演示模式
 
 - `?demo=1` 强制演示；GitHub Pages（`*.github.io`）自动进入演示。
-- `?demo=2`（或 `?demoDevices=2`）演示两台设备，端口编号 P0–P9；用于验证多台 UI。
+- `?demo=2`（或 `?demoDevices=2`）演示两台设备；`?demo=1..6` 可演示 1–6 台，端口编号 P0–P(5N-1)，用于验证多台 UI。
 - 演示数据由 `assets/js/demo.js` 生成，形状与上面的 snapshot/history 完全一致，
   包含 5 个端口、协议切换、功率波动和历史曲线，**不含任何真实 PSN / MAC / SSID / IP**。
 - 多台演示由 `demoMulti(count)` / `demoMultiHistoryFor(count)` 聚合，`device.index` 为 0、1，

@@ -63,7 +63,7 @@
 - **主题与语言**：浅色 / 深色（跟随系统或手动切换）；中文 / English。
 - **数据源可切换**：自动 / `metrics.json` / Prometheus `/metrics`；Prometheus 模式会明确标注
   「不提供充电时长与累计电量」。
-- **演示模式**：`?demo=1` 演示一台、`?demo=2` 演示两台（P0–P9）；GitHub Pages 自动演示。
+- **演示模式**：`?demo=1` … `?demo=6` 演示 1–6 台（2 台即 P0–P9）；GitHub Pages 自动演示。
 - **无构建、无 npm 依赖、无 CDN**：原生 HTML/CSS/ES Modules，直接跑。
 
 ## 快速开始
