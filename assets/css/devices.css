@@ -605,6 +605,28 @@
   white-space: nowrap;
 }
 
+.device-tier {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+}
+
+.device-tier.is-pro {
+  color: var(--text-2, #666);
+  background: var(--surface-3, #efefef);
+}
+
+.device-tier.is-ultra {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
 .device-meta {
   font-size: 10.5px;
   color: var(--text-3);

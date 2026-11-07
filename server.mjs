@@ -443,7 +443,8 @@ async function scanLan() {
           ip,
           name: info?.device_name || "小电拼",
           psn: info?.psn || null,
-          modelLabel: info?.product_family === "CP02" ? "AI 小电拼 Ultra (CP-02)" : info?.product_family || null,
+          model: info?.device_model || "",
+          modelLabel: buildDevice(info).modelLabel,
           ports: data.ports.length,
           rssi: data?.wifi?.rssi ?? null,
         });

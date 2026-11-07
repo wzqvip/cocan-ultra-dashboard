@@ -16,7 +16,7 @@ export { decodeProtocol, portColor, portName, portType };
 export const SETTINGS_KEY = "cocan-dash.settings.v1";
 export const DEFAULT_SETTINGS = {
   host: "",
-  devices: [], // [{ host, name, psn, modelLabel, lastSeen }]
+  devices: [], // [{ host, name, psn, model, modelLabel, lastSeen }]
   multi: false,
   multiHosts: [],
   mode: "auto", // auto | json | prometheus
@@ -40,6 +40,7 @@ function cleanDevices(list) {
       host,
       name: typeof item.name === "string" ? item.name.trim() : "",
       psn: typeof item.psn === "string" ? item.psn : "",
+      model: typeof item.model === "string" ? item.model : "",
       modelLabel: typeof item.modelLabel === "string" ? item.modelLabel : "",
       lastSeen: Number.isFinite(item.lastSeen) ? item.lastSeen : null,
     });
@@ -107,6 +108,7 @@ export function upsertDevice(device) {
     host,
     name: typeof device.name === "string" ? device.name.trim() : "",
     psn: typeof device.psn === "string" ? device.psn : "",
+    model: typeof device.model === "string" ? device.model : "",
     modelLabel: typeof device.modelLabel === "string" ? device.modelLabel : "",
     lastSeen: Number.isFinite(device.lastSeen) ? device.lastSeen : Date.now(),
   };
@@ -120,6 +122,33 @@ export function upsertDevice(device) {
       : [...current.multiHosts, host],
   });
   return settings.devices.find((d) => d.host === host) || entry;
+}
+
+export function updateDeviceMeta(host, meta = {}) {
+  const target = String(host || "").trim();
+  if (!target) return { updated: false };
+  const current = loadSettings();
+  const index = current.devices.findIndex((d) => d.host === target);
+  if (index < 0) return { updated: false };
+  const prev = current.devices[index];
+  const next = { ...prev };
+  let metadataChanged = false;
+  for (const key of ["name", "psn", "model", "modelLabel"]) {
+    const value = typeof meta[key] === "string" ? meta[key].trim() : "";
+    if (value && value !== prev[key]) {
+      next[key] = value;
+      metadataChanged = true;
+    }
+  }
+  const lastSeen = Number.isFinite(meta.lastSeen)
+    ? Math.max(Number(prev.lastSeen) || 0, meta.lastSeen)
+    : Date.now();
+  const lastSeenStale = !Number.isFinite(prev.lastSeen) || lastSeen - prev.lastSeen > 30000;
+  if (!metadataChanged && !lastSeenStale) return { updated: false };
+  next.lastSeen = lastSeen;
+  current.devices[index] = next;
+  saveSettings({ devices: current.devices });
+  return { updated: true, device: next };
 }
 
 export function removeDevice(host) {

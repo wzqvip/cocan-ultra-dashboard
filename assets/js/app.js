@@ -35,6 +35,7 @@ import {
   scanLan,
   setActiveDevice,
   setMultiSelection,
+  updateDeviceMeta,
   upsertDevice,
 } from "./data.js";
 import { PowerChart, drawSparkline } from "./charts.js";
@@ -379,6 +380,37 @@ function cssVar(name, fallback) {
 
 function savedDevices() {
   return getDevices();
+}
+
+// Keep saved device labels in sync with the live snapshot (e.g. Pro vs Ultra),
+// so the device dialog does not keep a stale "Pro / Ultra" label forever.
+function syncSavedDeviceMeta(devices) {
+  if (state.demo) return;
+  let changed = false;
+  for (const device of devices || []) {
+    const snapshot = device.device || {};
+    const host = device.host || hostForRequests();
+    if (!host) continue;
+    const meta = {
+      name: snapshot.name || "",
+      psn: snapshot.psn || "",
+      model: snapshot.model || "",
+      modelLabel: snapshot.modelLabel || "",
+      lastSeen: Number(device.fetchedAt) || Date.now(),
+    };
+    const existing = savedDevices().find((item) => item.host === host);
+    if (!existing) {
+      upsertDevice({ host, ...meta });
+      changed = true;
+      continue;
+    }
+    if (updateDeviceMeta(host, meta).updated) changed = true;
+  }
+  if (changed) {
+    state.settings = effectiveSettings();
+    if (getDevices().length > 0) state.discovery.active = false;
+    if (dom.deviceDialog?.open) renderDeviceDialog();
+  }
 }
 
 function sortedDevices() {
@@ -852,6 +884,7 @@ function addDeviceEntry(device, { use = false } = {}) {
     host,
     name: device.name || "",
     psn: device.psn || "",
+    model: device.model || "",
     modelLabel: device.modelLabel || "",
     lastSeen: Date.now(),
   });
@@ -1842,6 +1875,7 @@ function deviceDialogVisibleList() {
       host: device.host,
       name: deviceName(device),
       psn: device.device?.psn || "",
+      model: device.device?.model || "",
       modelLabel: device.device?.modelLabel || "",
       lastSeen: device.fetchedAt,
       demo: true,
@@ -1903,12 +1937,17 @@ function renderDeviceDialog() {
     const name = document.createElement("p");
     name.className = "device-name";
     name.textContent = device.name || device.host;
+    if (device.model === "pro" || device.model === "ultra") {
+      const tier = document.createElement("span");
+      tier.className = `device-tier is-${device.model}`;
+      tier.textContent = device.model === "ultra" ? "Ultra" : "Pro";
+      name.append(tier);
+    }
     const meta = document.createElement("p");
     meta.className = "device-meta";
     meta.textContent = [
       device.host,
       device.psn ? `PSN ${state.demo ? device.psn : maskPsn(device.psn)}` : "",
-      device.modelLabel ? device.modelLabel.replace(/（[^）]*）|\([^)]*\)/g, "").trim() : "",
       Number.isFinite(device.lastSeen) ? `${t("lastSeen")} ${fmtClock(device.lastSeen)}` : "",
     ]
       .filter(Boolean)
@@ -2314,19 +2353,7 @@ function applyAggregate(payload) {
 
   for (const device of devices) storeForDevice(device).add(device);
 
-  if (!state.demo && getDevices().length === 0 && devices.length > 0) {
-    for (const device of devices) {
-      upsertDevice({
-        host: device.host || hostForRequests(),
-        name: device.device?.name || "",
-        psn: device.device?.psn || "",
-        modelLabel: device.device?.modelLabel || "",
-        lastSeen: Date.now(),
-      });
-    }
-    state.settings = effectiveSettings();
-    state.discovery.active = false;
-  }
+  syncSavedDeviceMeta(devices);
 
   if (!state.historySeeded) {
     state.historySeeded = true;

@@ -139,8 +139,11 @@ function demoPort(id, spec, now, phaseElapsed) {
 
 function demoDevice(index) {
   const n = index + 1;
+  const isUltra = index === 1;
   return {
     ...DEMO_DEVICE,
+    model: isUltra ? "ultra" : "pro",
+    modelLabel: isUltra ? "AI 小电拼 Ultra（CP-02）" : "AI 小电拼 Pro（CP-02）",
     psn: `CP02-DEMO-000${n}`,
     name: `CP02-DEMO-0${n}`,
     mdnsHostname: `cp02-demo${n}.local`,
