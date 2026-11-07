@@ -124,6 +124,23 @@ node server.mjs --host cp02-<PSN>.local --lan
 任何 token；本项目是纯只读看板。更细的 App 对齐说明与证据见
 [docs/APP-PARITY.md](docs/APP-PARITY.md)。
 
+### 温度 / PD / 电池 / 线材与本地 MQTT
+
+这三类数据不在局域网 `/metrics.json` / `/metrics` 里：
+
+- **MCP** 可以拿温度档位、品牌/型号、电池电量/健康度、C4 线材 VID/速率/功率。
+  MCP 地址要在微信小程序「制糖工厂 CANDYSIGN → 设备 → 设置 → 核心功能 → 龙虾服务」里复制，
+  带 token；官方对比表显示 **Pro 和 Ultra 都支持**。
+- **自定义 MQTT broker** 是另一条全量本地通道，由 license feature bit
+  `MQTT_BROKER_CONFIG` 控制；本机 Pro 2.2.0 实测 `POST /setbrokerz` 返回
+  **403 `Feature is disabled`**，未发生写入，官方云连接不受影响。
+- `/metrics.json` 的 `pd_status=null` 很可能对应 `METRICS_JSON_PD_STATUS` feature bit，
+  同样是 Ultra/糖码授权项；不要在 Pro 上强行绕过。
+- Pro 可以通过「糖码」license 升级 Ultra；判断能力时优先看 license/feature bit，而不是只看型号。
+
+完整实测记录、端点差异、还原步骤和 MQTT 可控制项见
+[docs/MQTT-AND-LICENSING.md](docs/MQTT-AND-LICENSING.md)。
+
 ## 数据从哪来
 
 | 端点 | 内容 | 本看板用途 |
@@ -282,6 +299,7 @@ GitHub Pages，没有构建步骤。Pages 上的页面会自动进入**演示模
 ├── docs/
 │   ├── DATA-CONTRACT.md       # 前端唯一数据契约（含 /api/multi）
 │   ├── APP-PARITY.md          # 与 App 的对齐规格、来源与风险
+│   ├── MQTT-AND-LICENSING.md  # MQTT broker / MCP / Pro·Ultra / feature bit 实测
 │   └── screenshots/           # README 截图（演示数据）
 ├── start.bat / start.sh
 └── .github/workflows/pages.yml
@@ -311,6 +329,8 @@ curl "http://127.0.0.1:8787/api/multi?hosts=host1,host2"
 - 设备历史只有约 30 分钟；2 小时曲线只在页面打开期间记录，换浏览器/清缓存会丢。
 - 本次电量是换算估算，不是库仑计直读；会话切换后以设备新会话为准。
 - 160 W 是标称预算；实际分配由设备策略决定，本看板无法读取当前策略。
+- 温度/PD/电池/线材需要 MCP；自定义 MQTT broker 和 `/metrics.json` PD 详情由 license
+  feature bit 控制，本机 Pro 2.2.0 未开启（`setbrokerz` 返回 403），不要强行绕过。
 - 扫描只覆盖本机物理网卡的 /24 网段；跨网段、多网卡或复杂 VLAN 请手动输入 IP。
 - 多台模式每台独立轮询；设备较多时首屏会慢一些，单台超时不影响其余设备。
 - 多台端口编号是“设备槽位 × 5 + 本地 id”：机 1 为 P0–P4、机 2 为 P5–P9；离线槽位保留，不重新压缩。

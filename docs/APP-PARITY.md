@@ -266,6 +266,11 @@ body { font-family: var(--font-ui); background: var(--canvas); color: var(--ink)
 
 **为什么必须本地代理**：设备 HTTP 响应**不带 `Access-Control-Allow-Origin`**（实测响应头只有 `Content-Type`、`Content-Length`）[S1]，浏览器直接 `fetch` 会被 CORS 拦；由 `server.mjs` 同源代理 [S3 README][S3e]。第三方 `cp02_monitor` 也直接轮询 `/metrics`（500 ms）[S16]，说明 Prometheus 端点适合低频采集，但字段比 JSON 少。
 
+> 2.2.0 还暴露 `/setbrokerz`、`/destroymqttz`、`/startmqttz` 等端点，但由 license feature bit
+> （`MQTT_BROKER_CONFIG`、`METRICS_JSON_PD_STATUS`）控制；本机 Pro 实测 `setbrokerz`
+> 返回 403 `Feature is disabled`，`pd_status` 为 null。完整记录见
+> [MQTT-AND-LICENSING.md](MQTT-AND-LICENSING.md)。
+
 ### 5.2 `fc_protocol` 表（固件 `FastChargingProtocol`，0–20 + 255）
 
 | code | 固件名 | 建议 UI 文案 | 说明 |
