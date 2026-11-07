@@ -13,14 +13,41 @@
 [![Live demo](https://img.shields.io/badge/demo-GitHub%20Pages-ff4719.svg)](https://wzqvip.github.io/cocan-ultra-dashboard/)
 
 <p align="center">
-  <img src="docs/screenshots/desktop.png" alt="桌面端：功率分布图 + 总功率 + 端口与曲线" width="900">
+  <a href="https://wzqvip.github.io/cocan-ultra-dashboard/">
+    <img src="docs/screenshots/pages-live.png" alt="GitHub Pages 上编译好的在线看板" width="900">
+  </a>
 </p>
+
+## 在线网页
+
+GitHub Pages 上已经编译部署好的在线网页（点击图片或下面链接打开）：
+
+- [打开在线看板](https://wzqvip.github.io/cocan-ultra-dashboard/)
+- [直接看双设备演示（P0–P9）](https://wzqvip.github.io/cocan-ultra-dashboard/?demo=2)
+- [直接看六设备演示（P0–P29）](https://wzqvip.github.io/cocan-ultra-dashboard/?demo=6)
+- [GitHub 仓库](https://github.com/wzqvip/cocan-ultra-dashboard)
+
+> Pages 上是**演示模式**：HTTPS 页面不能直接请求 `http://` 设备，且设备没有 CORS 头。
+> 真机数据请在本地运行 `node server.mjs`，浏览器打开 `http://127.0.0.1:8787`。
 
 | 竖屏（2 台演示） | 横屏（2 台演示） |
 | --- | --- |
 | <img src="docs/screenshots/portrait.png" alt="竖屏双设备布局" width="280"> | <img src="docs/screenshots/landscape.png" alt="横屏双设备布局" width="560"> |
 
 > 截图使用**演示数据**（`?demo=2`），不包含真实设备的 PSN / MAC / SSID / IP。
+
+## 文档导航
+
+| 文档 | 内容 |
+| --- | --- |
+| [在线看板](https://wzqvip.github.io/cocan-ultra-dashboard/) | GitHub Pages 编译产物，演示数据 |
+| [Pro / Ultra 适配说明](docs/PRO-ULTRA.md) | 型号识别、混用、Pro/Ultra 差异、已测范围 |
+| [数据契约](docs/DATA-CONTRACT.md) | `/api/snapshot`、`/api/multi`、`/api/history` 字段与单位 |
+| [App 对齐规格](docs/APP-PARITY.md) | 官方 App UI、功率图、协议语义、来源与风险 |
+| [MQTT / MCP / 授权](docs/MQTT-AND-LICENSING.md) | MCP 获取、自定义 broker、feature bit、实测与还原流程 |
+| [README](README.md) | 本页：功能、快速开始、部署、排错 |
+| [LICENSE](LICENSE) | PolyForm Noncommercial 1.0.0（禁止商用） |
+| [GitHub Actions](.github/workflows/pages.yml) | Pages 构建/部署流程 |
 
 ---
 
@@ -43,6 +70,35 @@
 │  dashboard │  /api/snapshot     │  (Node 18+)  │  /metrics.json      │  IonBridge   │
 └────────────┘                    └──────────────┘  /metrics           └──────────────┘
 ```
+
+## 已验证设备
+
+目前只对 **CP-02 Pro** 做了实机测试；其他型号没有硬件，不能声称已实测。
+
+| 设备 | 状态 |
+| --- | --- |
+| **CP-02 Pro**（固件 2.2.0，ESP32-C3，SW3566 0.3.36，FPGA 0.2.9，hw MP0，160W 4C1A） | ✅ 实机验证：单台、扫描、多台（同设备双别名）、Pro/Ultra 混用演示、局域网数据、Prometheus、历史、设置、响应式 |
+| CP-02 Ultra | ⚠️ 未实机验证；按官方对比表/feature bit 适配，型号会显示 Ultra |
+| CP-02S / Core / Mirror（CP-03） | ❌ 未验证；CP-02S 的屏显/待机/整点报时不在此项目范围 |
+
+> 因此“测试了 CP-02”具体指 **CP-02 Pro / 2.2.0**；Ultra 的 Premium Kit 等能力没有被实机验证。
+
+## Pro / Ultra 对比与适配
+
+官方口径（[CANDYSIGN 对比表](https://weibo.com/2/detail/5346721887423088)）：Pro 与 Ultra **硬件相同**，
+Ultra 多了 Premium Kit、状态屏颜色和 SKU 权益；**龙虾服务 / MCP 两者都支持**；Pro 可用「糖码」升级 Ultra。
+
+| 项目 | Pro | Ultra | 看板怎么适配 |
+| --- | --- | --- | --- |
+| 硬件 | 160W、4C1A、C 140W、A 60W | 相同 | 同一套功率/端口/曲线 UI |
+| 状态屏颜色 | 金珀色 | 琥珀色 | 不伪造硬件颜色，只显示型号/能力 |
+| AI 充电系统 | FluxAI 2.0 | 2.0 + Premium Kit | 只读看板不实现写控制 |
+| 龙虾服务 / MCP | ✅ | ✅ | **不按型号锁 MCP** |
+| 糖码升级 | 可升级 Ultra | — | 能力判断优先看 license/feature bit，不只看 `device_model` |
+| 型号显示 | `AI 小电拼 Pro` | `AI 小电拼 Ultra` | 从设备 `device_model` 自动读取，并同步已保存设备 |
+| 混用多台 | ✅ | ✅ | 每台独立判断；P0–P4、P5–P9… |
+
+更细的适配、feature bit 和未验证范围见 [docs/PRO-ULTRA.md](docs/PRO-ULTRA.md)。
 
 ## 功能
 
@@ -299,7 +355,8 @@ GitHub Pages，没有构建步骤。Pages 上的页面会自动进入**演示模
 ├── docs/
 │   ├── DATA-CONTRACT.md       # 前端唯一数据契约（含 /api/multi）
 │   ├── APP-PARITY.md          # 与 App 的对齐规格、来源与风险
-│   ├── MQTT-AND-LICENSING.md  # MQTT broker / MCP / Pro·Ultra / feature bit 实测
+│   ├── PRO-ULTRA.md           # Pro/Ultra 识别、混用、能力差异、已测范围
+│   ├── MQTT-AND-LICENSING.md  # MQTT broker / MCP / feature bit 实测
 │   └── screenshots/           # README 截图（演示数据）
 ├── start.bat / start.sh
 └── .github/workflows/pages.yml
