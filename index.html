@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>AI 小电拼 Pro / Ultra · 实时看板</title>
-  <meta name="description" content="CANDYSIGN AI 小电拼 Pro / Ultra（CP-02，160W，5 口）的本地实时功率看板">
+  <meta name="description" content="CANDYSIGN AI 小电拼 Pro / Ultra（CP-02，160W，5 口）的本地实时功率看板，支持多台设备">
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#f4efe6">
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="./assets/css/layout.css">
   <link rel="stylesheet" href="./assets/css/components.css">
   <link rel="stylesheet" href="./assets/css/diagram.css">
+  <link rel="stylesheet" href="./assets/css/devices.css">
   <link rel="stylesheet" href="./assets/css/responsive.css">
 </head>
 <body>
@@ -35,7 +36,12 @@
         </span>
         <div class="brand-text">
           <h1 class="brand-title" id="brandTitle">AI 小电拼 Pro / Ultra</h1>
-          <span class="model-chip" id="modelChip">CP-02 · 160W · 5 口</span>
+          <button type="button" class="device-switch" id="deviceSwitch" aria-haspopup="dialog" aria-label="切换设备" data-i18n-aria="deviceSwitchAria">
+            <span class="ds-label" id="deviceSwitchLabel">CP-02 · pro</span>
+            <svg class="ds-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m6 9 6 6 6-6"/>
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -81,33 +87,38 @@
   <div class="app-shell container">
     <div class="banners" id="banners" role="region" aria-label="状态提示" aria-live="polite"></div>
 
-    <section class="card setup-card" id="setupCard" aria-labelledby="setupTitle" hidden>
-          <div class="setup-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M13 2.5 4.5 13.6H10L9 21.5l8.5-11.1H12l1-7.9Z"/>
-            </svg>
+    <!-- First-run discovery card -->
+    <section class="card setup-card discovery-card" id="setupCard" aria-labelledby="setupTitle" hidden>
+      <div class="setup-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 2.5 4.5 13.6H10L9 21.5l8.5-11.1H12l1-7.9Z"/>
+        </svg>
+      </div>
+      <div class="setup-body">
+        <div class="discovery-head">
+          <div>
+            <h2 class="card-title" id="setupTitle" data-i18n="discoveryTitle">发现设备</h2>
+            <p class="setup-text" data-i18n="discoveryBody">扫描局域网或手动添加设备地址。</p>
           </div>
-          <div class="setup-body">
-            <h2 class="card-title" id="setupTitle" data-i18n="setupTitle">还没有连接到充电器</h2>
-            <p class="setup-text" data-i18n="setupBody">启动本地代理并指定设备地址，或在设置里扫描局域网。</p>
-            <ol class="setup-steps">
-              <li>
-                <span class="setup-step-label" data-i18n="setupStep1">启动代理</span>
-                <code class="code" id="setupCmd">node server.mjs --host cp02-xxxx.local</code>
-              </li>
-              <li>
-                <span class="setup-step-label" data-i18n="setupStep2">打开设置并扫描局域网</span>
-              </li>
-            </ol>
-            <div class="setup-actions">
-              <button type="button" class="btn btn-primary" data-action="open-settings" data-i18n="openSettings">设置</button>
-              <button type="button" class="btn btn-soft" data-action="scan" data-i18n="scanLan">扫描局域网</button>
-              <button type="button" class="btn btn-ghost" data-action="retry" data-i18n="retry">重试</button>
-              <a class="btn btn-ghost" id="setupDemoLink" href="?demo=1" data-i18n="setupDemo">先看演示数据</a>
-            </div>
-            <p class="setup-hint" data-i18n="setupGuide">设备地址可以从路由器后台或 mDNS 名称获得。</p>
+          <button type="button" class="btn btn-primary" id="discoveryScanBtn" data-i18n="scanLan">扫描局域网</button>
+        </div>
+        <p class="scan-status" id="discoveryStatus" role="status"></p>
+        <ul class="discovery-list" id="discoveryList"></ul>
+        <div class="discovery-manual">
+          <label for="manualHost" data-i18n="manualHost">手动添加</label>
+          <div class="manual-row">
+            <input id="manualHost" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="cp02-xxxx.local 或 192.168.1.20" data-i18n-placeholder="manualHostPlaceholder">
+            <button type="button" class="btn btn-soft" id="manualAddBtn" data-i18n="add">添加</button>
           </div>
-        </section>
+        </div>
+        <div class="setup-actions">
+          <button type="button" class="btn btn-ghost" data-action="open-settings" data-i18n="openSettings">设置</button>
+          <a class="btn btn-ghost" id="setupDemoLink" href="?demo=1" data-i18n="setupDemo">先看演示数据</a>
+          <a class="btn btn-ghost" id="setupDemoTwoLink" href="?demo=2" data-i18n="demoTwo">演示 2 台</a>
+        </div>
+        <p class="setup-hint"><span data-i18n="setupStep1">启动代理</span>：<code class="code" id="setupCmd">node server.mjs --host cp02-xxxx.local</code></p>
+      </div>
+    </section>
 
     <main id="main" class="dashboard" tabindex="-1">
       <div class="dash-grid">
@@ -128,10 +139,11 @@
                   <span class="budget-ticks" aria-hidden="true"></span>
                 </div>
                 <div class="budget-labels">
-                  <span id="budgetText" data-i18n="budgetOf" data-i18n-vars='{"budget":160}'>160 W 标称</span>
+                  <span id="budgetText">标称 160 W</span>
                   <span id="budgetUtil">—</span>
                 </div>
               </div>
+              <p class="hero-meta" id="heroMeta">—</p>
             </div>
             <dl class="hero-stats">
               <div class="stat">
@@ -143,12 +155,12 @@
                 <dd id="statEnergy">—</dd>
               </div>
               <div class="stat">
-                <dt data-i18n="inputVoltage">输入电压</dt>
-                <dd id="statVin">—</dd>
+                <dt id="statLabel3" data-i18n="inputVoltage">输入电压</dt>
+                <dd id="statValue3">—</dd>
               </div>
               <div class="stat">
-                <dt data-i18n="uptime">运行时长</dt>
-                <dd id="statUptime">—</dd>
+                <dt id="statLabel4" data-i18n="uptime">运行时长</dt>
+                <dd id="statValue4">—</dd>
               </div>
             </dl>
           </section>
@@ -157,11 +169,20 @@
             <div class="card-head">
               <div class="card-head-text">
                 <h2 class="card-title" id="flowTitle" data-i18n="flowTitle">功率流向</h2>
-                <p class="card-sub" data-i18n="flowSub">点击端口查看详情</p>
+                <p class="card-sub" id="flowSub" data-i18n="flowSub">点击端口查看详情</p>
               </div>
-              <span class="budget-chip" id="flowBudgetChip">标称 160 W</span>
+              <div class="flow-tools">
+                <div class="seg view-seg" id="viewTabs" role="group" aria-label="视图" data-i18n-aria="viewLabel">
+                  <button type="button" class="seg-btn" data-view="pro" aria-pressed="true" data-i18n="proView">专业视图</button>
+                  <button type="button" class="seg-btn" data-view="simple" aria-pressed="false" data-i18n="simpleView">简洁视图</button>
+                </div>
+                <button type="button" class="btn btn-soft btn-sm" id="replayBtn" data-i18n="replayFlow">重播功率流</button>
+              </div>
             </div>
-            <div class="diagram-wrap" id="diagramWrap" role="group" aria-label="功率流向图"></div>
+            <div class="flow-content">
+              <div class="diagram-wrap" id="diagramWrap" role="group" aria-label="功率流向图"></div>
+              <div class="simple-wrap" id="simpleWrap" hidden></div>
+            </div>
           </section>
         </div>
 
@@ -197,7 +218,7 @@
                 <p class="card-sub" data-i18n="portsSub">每口实时功率、协议与本次电量</p>
               </div>
             </div>
-            <ul class="port-grid" id="portGrid"></ul>
+            <div class="port-groups" id="portGrid"></div>
           </section>
         </div>
       </div>
@@ -246,6 +267,7 @@
         <div class="sheet-head-text">
           <p class="sheet-eyebrow" data-i18n="portDetail">端口详情</p>
           <h2 class="sheet-title" id="detailTitle">—</h2>
+          <p class="sheet-device" id="detailDevice"></p>
         </div>
         <span class="badge state-badge" id="detailState">—</span>
         <button type="button" class="icon-btn" id="detailClose" aria-label="关闭详情" data-i18n-aria="close">
@@ -271,6 +293,63 @@
       </div>
     </section>
   </div>
+
+  <!-- Device switcher / manager -->
+  <dialog class="dialog device-dialog" id="deviceDialog" aria-labelledby="deviceDialogTitle">
+    <div class="device-form">
+      <header class="dialog-head">
+        <h2 class="card-title" id="deviceDialogTitle" data-i18n="devicesTitle">设备</h2>
+        <button type="button" class="icon-btn" id="deviceDialogClose" aria-label="关闭" data-i18n-aria="close">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="m6 6 12 12M18 6 6 18"/>
+          </svg>
+        </button>
+      </header>
+      <div class="dialog-body">
+        <div class="device-mode-bar">
+          <div class="seg" id="deviceModeTabs" role="group" aria-label="设备模式">
+            <button type="button" class="seg-btn" data-mode="single" aria-pressed="true" data-i18n="singleDevice">单台</button>
+            <button type="button" class="seg-btn" data-mode="multi" aria-pressed="false" data-i18n="multiDevice">多台</button>
+          </div>
+          <span class="mode-hint" id="deviceModeHint"></span>
+        </div>
+
+        <section class="dlg-section">
+          <div class="section-head">
+            <h3 class="dlg-section-title" data-i18n="savedDevices">已保存设备</h3>
+            <span class="device-count" id="savedCount"></span>
+          </div>
+          <ul class="device-list" id="savedDeviceList"></ul>
+        </section>
+
+        <section class="dlg-section">
+          <div class="section-head">
+            <h3 class="dlg-section-title" data-i18n="deviceScanHint">扫描局域网</h3>
+            <button type="button" class="btn btn-soft btn-sm" id="deviceScanBtn" data-i18n="scanLan">扫描局域网</button>
+          </div>
+          <p class="field-hint" id="deviceScanStatus" role="status"></p>
+          <ul class="scan-list" id="deviceScanList"></ul>
+        </section>
+
+        <section class="dlg-section">
+          <label class="dlg-section-title" for="deviceManualHost" data-i18n="manualHost">手动添加</label>
+          <div class="manual-row">
+            <input id="deviceManualHost" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="cp02-xxxx.local 或 192.168.1.20" data-i18n-placeholder="manualHostPlaceholder">
+            <button type="button" class="btn btn-soft" id="deviceManualAdd" data-i18n="add">添加</button>
+          </div>
+        </section>
+
+        <p class="dialog-note" data-i18n="mcpNote">模式控制需 MCP token，本看板只读展示。</p>
+      </div>
+      <footer class="dialog-foot">
+        <a class="btn btn-ghost" id="demoOneLink" href="?demo=1" data-i18n="demoOne">演示 1 台</a>
+        <a class="btn btn-ghost" id="demoTwoLink" href="?demo=2" data-i18n="demoTwo">演示 2 台</a>
+        <span class="spacer" aria-hidden="true"></span>
+        <button type="button" class="btn btn-primary" id="deviceApplyMulti" data-i18n="applyMulti" hidden>应用多选</button>
+        <button type="button" class="btn btn-ghost" id="deviceDialogDone" data-i18n="close">关闭</button>
+      </footer>
+    </div>
+  </dialog>
 
   <!-- Settings -->
   <dialog class="dialog settings-dialog" id="settingsDialog" aria-labelledby="settingsTitle">
@@ -328,6 +407,7 @@
           </div>
         </div>
         <div class="action-row">
+          <button type="button" class="btn btn-soft" id="manageDevicesBtn" data-i18n="manageDevices">管理设备</button>
           <button type="button" class="btn btn-soft" id="testBtn" data-i18n="testConn">测试连接</button>
           <button type="button" class="btn btn-soft" id="scanBtn" data-i18n="scanLan">扫描局域网</button>
         </div>
@@ -340,6 +420,7 @@
           <ul class="scan-list" id="scanList"></ul>
         </div>
         <p class="field-hint" id="setupHint" hidden data-i18n="noDeviceHint"></p>
+        <p class="dialog-note" data-i18n="mcpNote">模式控制需 MCP token，本看板只读展示。</p>
       </div>
       <footer class="dialog-foot">
         <button type="button" class="btn btn-ghost" id="resetBtn" data-i18n="reset">恢复默认</button>

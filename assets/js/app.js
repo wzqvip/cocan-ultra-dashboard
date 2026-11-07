@@ -1,12 +1,15 @@
 /**
- * CP-02 dashboard application: state, polling, rendering, interaction.
+ * CP-02 dashboard application: single & multi-device state, polling, rendering,
+ * device discovery/selection and the official-app Pro/Simple views.
+ *
  * Data access is delegated to ./data.js (documented in docs/DATA-CONTRACT.md).
  */
 
 import {
   HistoryStore,
-  demo,
-  demoHistoryFor,
+  aggregateSnapshots,
+  demoMulti,
+  demoMultiHistoryFor,
   effectiveSettings,
   fmtAmps,
   fmtBytes,
@@ -16,25 +19,34 @@ import {
   fmtUptime,
   fmtVolts,
   fmtWatts,
+  getDevices,
   getHistory,
+  getMulti,
+  getMultiHistory,
   getSnapshot,
   getUrlOverrides,
   portColor,
   portName,
   portType,
   probeProxy,
+  removeDevice,
   resetSettings,
   saveSettings,
   scanLan,
+  setActiveDevice,
+  setMultiSelection,
+  upsertDevice,
 } from "./data.js";
 import { PowerChart, drawSparkline } from "./charts.js";
 import { applyI18n, getLang, protocolLabel, setLang, t } from "./i18n.js";
 import { createDiagram } from "./diagram.js";
 
 const PORT_IDS = [0, 1, 2, 3, 4];
+const MAX_DEVICES = 6;
 const RANGES = { "5m": 5 * 60 * 1000, "30m": 30 * 60 * 1000, "2h": 2 * 60 * 60 * 1000 };
 const RANGE_SUB = { "5m": "chartSub5m", "30m": "chartSub30m", "2h": "chartSub2h" };
 const HISTORY_MAX_AGE = 2 * 60 * 60 * 1000;
+const DEVICE_COLORS = ["#FF7315", "#2C89FB", "#22C55E", "#A855F7", "#EC4899", "#0EA5E9"];
 
 const WARN_STATES = new Set([
   "OVER_TEMP_WARNING",
@@ -69,20 +81,27 @@ const BANNER_ICONS = {
 const state = {
   settings: null,
   demo: false,
+  demoCount: 1,
+  multi: false,
   status: "loading",
   loading: true,
-  snapshot: null,
+  aggregate: null,
+  devices: [],
+  selectedPort: null, // { globalId, deviceIndex, portId }
   lastGood: null,
   lastGoodAt: 0,
   lastError: null,
   lastErrorCode: "",
-  store: null,
+  stores: new Map(),
   chart: null,
-  diagram: null,
-  selected: null,
+  diagrams: new Map(),
+  diagramSignature: "",
+  view: "pro",
   range: "30m",
   hidden: new Set(),
   portNodes: new Map(),
+  deviceGroupNodes: new Map(),
+  portSignature: "",
   timer: 0,
   gen: 0,
   polling: false,
@@ -92,13 +111,27 @@ const state = {
   detailReturnFocus: null,
   lastAnnounceAt: 0,
   legendSignature: "",
-  modelChipSignature: "",
-  staleTimer: 0,
-  themeQuery: null,
-  resolvedTheme: "light",
+  chartSeriesMeta: [],
+  chartLineIds: ["total"],
   chartHasData: false,
   historySeeded: false,
   refreshSpinnerUntil: 0,
+  staleTimer: 0,
+  themeQuery: null,
+  resolvedTheme: "light",
+  discovery: {
+    active: false,
+    scanning: false,
+    started: false,
+    results: [],
+    statusKey: "",
+    statusVars: null,
+    error: null,
+    scannedAt: 0,
+  },
+  deviceDialogMode: "single",
+  multiDraft: new Set(),
+  deviceScan: { scanning: false, results: [], statusKey: "", error: null },
 };
 
 const dom = {};
@@ -110,7 +143,8 @@ function $(selector, root = document) {
 function cacheDom() {
   dom.root = document.documentElement;
   dom.brandTitle = $("#brandTitle");
-  dom.modelChip = $("#modelChip");
+  dom.deviceSwitch = $("#deviceSwitch");
+  dom.deviceSwitchLabel = $("#deviceSwitchLabel");
   dom.statusPill = $("#statusPill");
   dom.statusText = $("#statusText");
   dom.fwVersion = $("#fwVersion");
@@ -123,6 +157,7 @@ function cacheDom() {
   dom.banners = $("#banners");
   dom.hero = $("#hero");
   dom.heroFresh = $("#heroFresh");
+  dom.heroMeta = $("#heroMeta");
   dom.totalW = $("#totalW");
   dom.budgetBar = $("#budgetBar");
   dom.budgetFill = $("#budgetFill");
@@ -130,10 +165,15 @@ function cacheDom() {
   dom.budgetUtil = $("#budgetUtil");
   dom.statPorts = $("#statPorts");
   dom.statEnergy = $("#statEnergy");
-  dom.statVin = $("#statVin");
-  dom.statUptime = $("#statUptime");
+  dom.statLabel3 = $("#statLabel3");
+  dom.statValue3 = $("#statValue3");
+  dom.statLabel4 = $("#statLabel4");
+  dom.statValue4 = $("#statValue4");
   dom.diagramWrap = $("#diagramWrap");
-  dom.flowBudgetChip = $("#flowBudgetChip");
+  dom.simpleWrap = $("#simpleWrap");
+  dom.viewTabs = $("#viewTabs");
+  dom.replayBtn = $("#replayBtn");
+  dom.flowSub = $("#flowSub");
   dom.chartWrap = $("#chartWrap");
   dom.chart = $("#powerChart");
   dom.chartOverlay = $("#chartOverlay");
@@ -145,6 +185,12 @@ function cacheDom() {
   dom.setupCard = $("#setupCard");
   dom.setupCmd = $("#setupCmd");
   dom.setupDemoLink = $("#setupDemoLink");
+  dom.setupDemoTwoLink = $("#setupDemoTwoLink");
+  dom.discoveryScanBtn = $("#discoveryScanBtn");
+  dom.discoveryStatus = $("#discoveryStatus");
+  dom.discoveryList = $("#discoveryList");
+  dom.manualHost = $("#manualHost");
+  dom.manualAddBtn = $("#manualAddBtn");
   dom.sysDetails = $("#systemDetails");
   dom.sysGrid = $("#sysGrid");
   dom.sourceBadge = $("#sourceBadge");
@@ -155,6 +201,7 @@ function cacheDom() {
   dom.detailSheet = $("#detailSheet");
   dom.detailDot = $("#detailDot");
   dom.detailTitle = $("#detailTitle");
+  dom.detailDevice = $("#detailDevice");
   dom.detailState = $("#detailState");
   dom.detailW = $("#detailW");
   dom.detailProto = $("#detailProto");
@@ -162,6 +209,21 @@ function cacheDom() {
   dom.detailClose = $("#detailClose");
   dom.detailSpark = $("#detailSpark");
   dom.detailSparkMeta = $("#detailSparkMeta");
+  dom.deviceDialog = $("#deviceDialog");
+  dom.deviceDialogClose = $("#deviceDialogClose");
+  dom.deviceDialogDone = $("#deviceDialogDone");
+  dom.deviceModeTabs = $("#deviceModeTabs");
+  dom.deviceModeHint = $("#deviceModeHint");
+  dom.savedDeviceList = $("#savedDeviceList");
+  dom.savedCount = $("#savedCount");
+  dom.deviceScanBtn = $("#deviceScanBtn");
+  dom.deviceScanStatus = $("#deviceScanStatus");
+  dom.deviceScanList = $("#deviceScanList");
+  dom.deviceManualHost = $("#deviceManualHost");
+  dom.deviceManualAdd = $("#deviceManualAdd");
+  dom.deviceApplyMulti = $("#deviceApplyMulti");
+  dom.demoOneLink = $("#demoOneLink");
+  dom.demoTwoLink = $("#demoTwoLink");
   dom.settingsDialog = $("#settingsDialog");
   dom.settingsForm = $("#settingsForm");
   dom.settingsClose = $("#settingsClose");
@@ -173,6 +235,7 @@ function cacheDom() {
   dom.setTheme = $("#setTheme");
   dom.setLang = $("#setLang");
   dom.urlHostNote = $("#urlHostNote");
+  dom.manageDevicesBtn = $("#manageDevicesBtn");
   dom.testBtn = $("#testBtn");
   dom.scanBtn = $("#scanBtn");
   dom.testStatus = $("#testStatus");
@@ -191,7 +254,6 @@ function powerParts(watts) {
   return watts >= 100 ? String(Math.round(watts)) : watts.toFixed(1);
 }
 
-/** Blend a hex colour toward another (used to keep chart lines readable on light). */
 function mixHex(hex, target, ratio) {
   const parse = (value) => {
     const match = /^#([0-9a-f]{6})$/i.exec(String(value).trim());
@@ -206,11 +268,17 @@ function mixHex(hex, target, ratio) {
   return `#${[0, 1, 2].map((index) => channel(index).toString(16).padStart(2, "0")).join("")}`;
 }
 
-/** Port accent for chart graphics; slightly darkened in light mode for contrast. */
+function chartLineColor(hex) {
+  if (state.resolvedTheme !== "light") return hex;
+  return mixHex(hex, "#1b130a", 0.38);
+}
+
 function chartPortColor(id) {
-  const base = portColor(id);
-  if (state.resolvedTheme !== "light") return base;
-  return mixHex(base, "#1b130a", 0.38);
+  return chartLineColor(portColor(id));
+}
+
+function chartDeviceColor(index) {
+  return chartLineColor(DEVICE_COLORS[Number(index) % DEVICE_COLORS.length]);
 }
 
 function pad2(n) {
@@ -306,6 +374,119 @@ function cssVar(name, fallback) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Device / settings helpers                                          */
+/* ------------------------------------------------------------------ */
+
+function savedDevices() {
+  return getDevices();
+}
+
+function sortedDevices() {
+  return [...state.devices].sort((a, b) => Number(a.index) - Number(b.index));
+}
+
+function primaryDevice() {
+  return sortedDevices()[0] || null;
+}
+
+function deviceKey(device) {
+  return device?.host || `slot-${device?.index ?? 0}`;
+}
+
+function deviceLabel(device) {
+  return t("deviceLabel", { n: Number(device?.index ?? 0) + 1 });
+}
+
+function deviceName(device) {
+  return device?.device?.name || device?.host || deviceLabel(device);
+}
+
+function isLiveMulti() {
+  return Boolean(
+    !state.demo &&
+      state.settings?.multi &&
+      Array.isArray(state.settings.multiHosts) &&
+      state.settings.multiHosts.length > 1,
+  );
+}
+
+function totalDeviceCount() {
+  if (state.demo) return state.demoCount;
+  if (isLiveMulti()) return state.settings.multiHosts.length;
+  return 1;
+}
+
+function onlineDeviceCount() {
+  return state.devices.length;
+}
+
+function energyAvailableAll() {
+  if (!state.devices.length) return false;
+  return state.devices.every((device) => device.capabilities?.energy !== false);
+}
+
+function aggregateTotals() {
+  if (state.aggregate?.totals) return state.aggregate.totals;
+  return aggregateSnapshots(state.devices, Date.now()).totals;
+}
+
+function inputVoltageAverage() {
+  const values = state.devices
+    .map((device) => Number(device.totals?.inputVoltageV))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : NaN;
+}
+
+function chargingDeviceCount() {
+  return state.devices.filter((device) => (Number(device.totals?.chargingCount) || 0) > 0).length;
+}
+
+function storeForHost(host) {
+  const key = host || "default";
+  let store = state.stores.get(key);
+  if (!store) {
+    store = new HistoryStore(key, { maxAgeMs: HISTORY_MAX_AGE, minGapMs: 3000 });
+    state.stores.set(key, store);
+  }
+  return store;
+}
+
+function storeForDevice(device) {
+  return storeForHost(deviceKey(device));
+}
+
+function primaryStore() {
+  const device = primaryDevice();
+  if (!device) return null;
+  return state.stores.get(deviceKey(device)) || null;
+}
+
+function globalIdFor(device, portId) {
+  const port = findPort(device, portId);
+  if (port && Number.isFinite(Number(port.globalId))) return Number(port.globalId);
+  return Number(device.index || 0) * 5 + Number(portId);
+}
+
+function resolvePort(globalId) {
+  const target = Number(globalId);
+  for (const device of sortedDevices()) {
+    for (const port of device.ports || []) {
+      const gid = Number.isFinite(Number(port.globalId))
+        ? Number(port.globalId)
+        : Number(device.index) * 5 + Number(port.id);
+      if (gid === target) return { device, port };
+    }
+  }
+  return null;
+}
+
+function portCapability(device, portId) {
+  const declared = Number(device?.device?.portMaxW?.[portId]);
+  if (Number.isFinite(declared) && declared > 0) return declared;
+  return Number(portId) === 0 ? 60 : 140;
+}
+
+/* ------------------------------------------------------------------ */
 /* URLs and settings helpers                                          */
 /* ------------------------------------------------------------------ */
 
@@ -319,24 +500,19 @@ function modeForRequests() {
   return url.mode || state.settings?.mode || "auto";
 }
 
-function historyKey() {
-  return state.demo ? "demo" : hostForRequests() || "default";
-}
-
-function urlWithDemo() {
+function urlWithDemo(count = 1) {
   const url = new URL(location.href);
-  url.searchParams.set("demo", "1");
+  url.searchParams.set("demo", String(count));
+  url.searchParams.delete("demoDevices");
+  url.searchParams.delete("multi");
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
 function urlWithoutDemo() {
   const url = new URL(location.href);
   url.searchParams.delete("demo");
+  url.searchParams.delete("demoDevices");
   return `${url.pathname}${url.search}${url.hash}`;
-}
-
-function newHistoryStore() {
-  return new HistoryStore(historyKey(), { maxAgeMs: HISTORY_MAX_AGE, minGapMs: 3000 });
 }
 
 function currentInterval() {
@@ -351,11 +527,19 @@ function staleLimit() {
 function isProxyError(error) {
   if (!error) return false;
   const code = String(error.code || "").toUpperCase();
-  if (code === "NO_DEVICE") return false;
+  if (code === "NO_DEVICE" || code === "NO_DEVICES") return false;
   if (code === "TIMEOUT") return false;
   if (code === "NOT_FOUND" || code === "HTTP_404") return true;
   if (code.startsWith("HTTP_")) return true;
   return error.name === "TypeError";
+}
+
+function syncMultiFlag() {
+  if (state.demo) {
+    state.multi = state.demoCount > 1;
+  } else {
+    state.multi = isLiveMulti() || state.devices.length > 1;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -374,7 +558,7 @@ function applyTheme(preference) {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", resolved === "dark" ? "#121417" : "#f4efe6");
   if (state.chart) {
-    buildLegend(true);
+    renderFlow();
     refreshChart();
   }
 }
@@ -388,7 +572,10 @@ function deriveStatus() {
   if (state.loading && !state.lastGood) return "loading";
   if (!state.lastGood) {
     if (!state.lastError) return "loading";
-    return state.lastErrorCode === "NO_DEVICE" ? "setup" : "offline";
+    const code = String(state.lastErrorCode || "").toUpperCase();
+    if (code === "NO_DEVICE" || code === "NO_DEVICES") return "setup";
+    if (code === "ALL_DEVICES_FAILED" && !getDevices().length) return "setup";
+    return "offline";
   }
   if (state.lastError) return "offline";
   if (Date.now() - state.lastGoodAt > staleLimit()) return "stale";
@@ -463,14 +650,20 @@ function renderBanners() {
   const signatureParts = [];
 
   if (state.demo) {
+    const count = state.devices.length || state.demoCount;
     const actions = [];
     if (getUrlOverrides().demo) {
       actions.push({ label: t("demoExit"), href: urlWithoutDemo() });
+      actions.push(
+        count > 1
+          ? { label: t("demoOne"), href: urlWithDemo(1) }
+          : { label: t("demoTwo"), href: urlWithDemo(2) },
+      );
     }
     banners.push({
       tone: "demo",
       title: t("demoBannerTitle"),
-      text: t("demoBannerText"),
+      text: count > 1 ? t("demoBannerTextMulti", { n: count }) : t("demoBannerText"),
       actions,
     });
   } else if (status === "offline") {
@@ -482,7 +675,7 @@ function renderBanners() {
         tone: "bad",
         title: t("proxyMissingTitle"),
         text: t("proxyMissingText"),
-        actions: [...actions, { label: t("enterDemo"), href: urlWithDemo() }],
+        actions: [...actions, { label: t("enterDemo"), href: urlWithDemo(1) }],
       });
     } else {
       banners.push({
@@ -490,8 +683,8 @@ function renderBanners() {
         title: t("offlineTitle"),
         text: state.lastGood
           ? t("offlineText", { time: fmtClock(state.lastGood.fetchedAt) })
-          : t("offlineNoData"),
-        actions,
+          : state.lastError?.message || t("offlineNoData"),
+        actions: [...actions, { label: t("devicesTitle"), action: "devices" }],
       });
     }
   } else if (status === "stale") {
@@ -501,13 +694,40 @@ function renderBanners() {
       text: t("staleText", { time: fmtClock(state.lastGood?.fetchedAt) }),
       actions: [{ label: t("retry"), action: "retry" }],
     });
+  } else if (status === "setup" && !state.discovery.active) {
+    banners.push({
+      tone: "info",
+      title: t("setupTitle"),
+      text: t("noDeviceHint"),
+      actions: [
+        { label: t("devicesTitle"), action: "devices", kind: "primary" },
+        { label: t("scanLan"), action: "scan" },
+        { label: t("enterDemo"), href: urlWithDemo(1) },
+      ],
+    });
   }
 
-  if (!state.demo && state.snapshot && status !== "offline") {
-    const warnings = (state.snapshot.warnings || [])
+  if (!state.demo && state.aggregate?.errors?.length && status !== "offline") {
+    const lines = state.aggregate.errors.slice(0, 3).map((item) =>
+      t("partialText", { host: item.host || "—", message: item.message || item.error || "—" }),
+    );
+    banners.push({
+      tone: "warn",
+      title: t("partialTitle"),
+      text: lines.join(" · "),
+      actions: [
+        { label: t("retry"), action: "retry" },
+        { label: t("devicesTitle"), action: "devices" },
+      ],
+    });
+  }
+
+  if (!state.demo && state.devices.length > 0 && status !== "offline") {
+    const warningHost = state.devices.find((device) => (device.warnings || []).length) || null;
+    const warnings = (warningHost?.warnings || [])
       .map((warning) => String(warning))
       .filter((warning) => warning && !warning.includes("演示"))
-      .slice(0, 3);
+      .slice(0, 2);
     for (const warning of warnings) {
       banners.push({ tone: "warn", title: t("warningsTitle"), text: warning });
     }
@@ -522,56 +742,184 @@ function renderBanners() {
   dom.banners.replaceChildren(...banners.map(makeBanner));
 }
 
-function shouldShowSetup() {
+/* ------------------------------------------------------------------ */
+/* Discovery (first run)                                              */
+/* ------------------------------------------------------------------ */
+
+function discoveryVisible() {
   if (state.demo) return false;
+  if (!state.discovery.active) return false;
+  if (savedDevices().length > 0) return false;
   if (state.lastGood) return false;
-  if (state.loading) return false;
-  return deriveStatus() === "setup";
+  return true;
+}
+
+function setDiscoveryStatus(key, vars = null) {
+  state.discovery.statusKey = key;
+  state.discovery.statusVars = vars;
+}
+
+function renderDiscovery() {
+  const visible = discoveryVisible();
+  dom.setupCard.hidden = !visible;
+  if (!visible) return;
+
+  dom.discoveryScanBtn.disabled = state.discovery.scanning;
+  dom.discoveryScanBtn.textContent = state.discovery.scanning ? t("scanning") : t("scanLan");
+  dom.discoveryStatus.textContent = state.discovery.statusKey
+    ? t(state.discovery.statusKey, state.discovery.statusVars || undefined)
+    : "";
+  dom.discoveryList.replaceChildren();
+
+  for (const device of state.discovery.results) {
+    const item = document.createElement("li");
+    item.className = "discovery-item";
+    const text = document.createElement("div");
+    text.className = "discovery-item-text";
+    const name = document.createElement("p");
+    name.className = "discovery-name";
+    name.textContent = device.name || device.host || device.ip || "—";
+    const meta = document.createElement("p");
+    meta.className = "discovery-meta";
+    meta.textContent = [
+      device.host || device.ip,
+      device.psn ? `PSN ${maskPsn(device.psn)}` : "",
+      Number.isFinite(Number(device.rssi)) ? fmtRssi(Number(device.rssi)) : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    text.append(name, meta);
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "btn btn-primary";
+    add.textContent = t("addAndUse");
+    add.addEventListener("click", () => {
+      addDeviceEntry(device, { use: true });
+    });
+    item.append(text, add);
+    dom.discoveryList.append(item);
+  }
+
+  if (state.discovery.results.length === 0 && state.discovery.statusKey === "discoveryEmpty") {
+    const empty = document.createElement("li");
+    empty.className = "discovery-item";
+    empty.textContent = t("discoveryEmpty");
+    dom.discoveryList.append(empty);
+  }
+
+  dom.setupCmd.textContent = `node server.mjs${hostForRequests() ? ` --host ${hostForRequests()}` : " --host cp02-xxxx.local"}`;
+}
+
+function activateDiscovery(autoScan = true) {
+  if (state.demo) return;
+  if (savedDevices().length > 0) return;
+  state.discovery.active = true;
+  renderDiscovery();
+  if (autoScan && !state.discovery.started) {
+    state.discovery.started = true;
+    startDiscoveryScan({ auto: true });
+  }
+}
+
+async function startDiscoveryScan({ auto = false } = {}) {
+  if (state.discovery.scanning) return;
+  state.discovery.scanning = true;
+  setDiscoveryStatus("discoveryScanning");
+  renderDiscovery();
+  try {
+    const result = await scanLan();
+    state.discovery.results = Array.isArray(result?.devices) ? result.devices : [];
+    state.discovery.scannedAt = Date.now();
+    state.discovery.error = null;
+    setDiscoveryStatus(
+      state.discovery.results.length ? "discoveryFound" : "discoveryEmpty",
+      { n: state.discovery.results.length },
+    );
+  } catch (error) {
+    state.discovery.results = [];
+    state.discovery.error = error;
+    setDiscoveryStatus(isProxyError(error) ? "scanProxyMissing" : "discoveryError");
+  } finally {
+    state.discovery.scanning = false;
+    renderDiscovery();
+  }
+}
+
+function addDeviceEntry(device, { use = false } = {}) {
+  const host = String(device.host || device.ip || "").trim();
+  if (!host) return;
+  upsertDevice({
+    host,
+    name: device.name || "",
+    psn: device.psn || "",
+    modelLabel: device.modelLabel || "",
+    lastSeen: Date.now(),
+  });
+  state.settings = effectiveSettings();
+  hideDiscoveryIfReady();
+  if (use) {
+    setActiveDevice(host);
+    state.settings = effectiveSettings();
+    reinitializeData();
+    closeDeviceDialog();
+  } else {
+    renderHeader();
+    renderDeviceDialog();
+  }
+}
+
+function hideDiscoveryIfReady() {
+  if (savedDevices().length > 0) {
+    state.discovery.active = false;
+  }
+  renderDiscovery();
 }
 
 /* ------------------------------------------------------------------ */
 /* Header / hero                                                      */
 /* ------------------------------------------------------------------ */
 
-function renderHeader(snapshot) {
-  const device = snapshot?.device || {};
+function updateDeviceSwitch() {
+  const primary = primaryDevice();
+  let label;
+  if (state.demo) {
+    label = `${t("statusDemo")} · ${t("multiBadge", { n: state.demoCount })}`;
+  } else if (state.multi) {
+    label = t("multiBadge", { n: state.devices.length || totalDeviceCount() });
+  } else {
+    label = primary ? deviceName(primary) : hostForRequests() || t("discoveryTitle");
+  }
+  dom.deviceSwitchLabel.textContent = label;
+  dom.deviceSwitch.dataset.multi = String(state.multi);
+  const bits = [label];
+  if (primary) {
+    bits.push(primary.device?.modelLabel || primary.device?.name || "", primary.host || "");
+  }
+  dom.deviceSwitch.title = bits.filter(Boolean).join(" · ");
+  dom.deviceSwitch.setAttribute("aria-label", `${t("deviceSwitchAria")}: ${label}`);
+}
+
+function renderHeader() {
+  const primary = primaryDevice();
+  const device = primary?.device || {};
   const display =
     typeof device.modelLabel === "string" && device.modelLabel.trim()
       ? device.modelLabel.replace(/（[^）]*）|\([^)]*\)/g, "").trim() || device.modelLabel
       : "AI 小电拼 Pro / Ultra";
   dom.brandTitle.textContent = display;
   dom.brandTitle.title = device.modelLabel || display;
+  updateDeviceSwitch();
 
-  const model = device.model ? String(device.model) : "";
-  const familyRaw = device.family ? String(device.family) : "CP-02";
-  const family = familyRaw.replace(/^CP(\d+)$/i, "CP-$1");
-  const maxPower = Number(device.maxPowerW) || 160;
-  const portCount = t("portCount", { n: 5 });
-  const chipParts = [
-    { cls: "mc-family", text: family },
-    { cls: "mc-spec", text: ` · ${maxPower}W · ${portCount}` },
-  ];
-  if (model) chipParts.push({ cls: "mc-model", text: ` · ${model}` });
-  const chipSignature = chipParts.map((part) => part.text).join("");
-  if (chipSignature !== state.modelChipSignature) {
-    state.modelChipSignature = chipSignature;
-    const spans = chipParts.map((part) => {
-      const span = document.createElement("span");
-      span.className = part.cls;
-      span.textContent = part.text;
-      return span;
-    });
-    dom.modelChip.replaceChildren(...spans);
-  }
-
-  const fw = device.esp32Version || snapshot?.system?.appVersion;
+  const fw = device.esp32Version || primary?.system?.appVersion;
   dom.fwVersion.textContent = fw ? String(fw) : "—";
-
   const psn = device.psn;
-  dom.psnText.textContent = state.demo ? psn || "—" : maskPsn(psn);
-  dom.psnText.title = state.demo ? String(psn || "") : t("labelPsn");
-
-  dom.flowBudgetChip.textContent = t("budgetChip", { w: Math.round(Number(snapshot?.totals?.budgetW) || maxPower) });
+  if (state.multi) {
+    dom.psnText.textContent = t("multiBadge", { n: state.devices.length || totalDeviceCount() });
+    dom.psnText.title = "";
+  } else {
+    dom.psnText.textContent = state.demo ? psn || "—" : maskPsn(psn);
+    dom.psnText.title = state.demo ? String(psn || "") : t("labelPsn");
+  }
 }
 
 function setUnavailable(element, unavailable, title) {
@@ -580,11 +928,12 @@ function setUnavailable(element, unavailable, title) {
   else element.removeAttribute("title");
 }
 
-function renderHero(snapshot) {
-  const totals = snapshot?.totals;
-  const device = snapshot?.device;
-  const energyAvailable = snapshot?.capabilities?.energy !== false;
-  const budget = Number(totals?.budgetW) || Number(device?.maxPowerW) || 160;
+function renderHero() {
+  const totals = aggregateTotals();
+  const hasData = state.devices.length > 0;
+  const energyAvailable = hasData && energyAvailableAll();
+  const budget = Number(totals?.budgetW) || (hasData ? 160 * state.devices.length : 160);
+  const ports = Number(totals?.portCount) || (hasData ? 5 * state.devices.length : 5);
   const power = Number(totals?.powerW);
   const utilizationRaw = Number(totals?.utilization);
   const utilization = Number.isFinite(utilizationRaw)
@@ -593,7 +942,7 @@ function renderHero(snapshot) {
       ? (power / budget) * 100
       : NaN;
 
-  dom.totalW.textContent = snapshot ? powerParts(power) : "—";
+  dom.totalW.textContent = hasData ? powerParts(power) : "—";
   dom.totalW.classList.remove("is-skel");
 
   const clamped = Number.isFinite(utilization) ? Math.max(0, Math.min(100, utilization)) : 0;
@@ -609,14 +958,38 @@ function renderHero(snapshot) {
   );
   dom.budgetText.textContent = t("budgetOf", { budget: Math.round(budget) });
   dom.budgetUtil.textContent = Number.isFinite(utilization) ? `${utilization.toFixed(1)}%` : "—";
-  dom.heroFresh.textContent = snapshot ? t("updatedAt", { time: fmtClock(snapshot.fetchedAt) }) : "—";
+  dom.heroFresh.textContent = state.aggregate ? t("updatedAt", { time: fmtClock(state.aggregate.fetchedAt) }) : "—";
 
-  if (!snapshot) {
+  const chargingDevices = chargingDeviceCount();
+  const metaParts = [];
+  if (hasData) {
+    metaParts.push(t("capacityLabel", { budget: Math.round(budget), ports }));
+    metaParts.push(t("devicesCharging", { n: chargingDevices }));
+  } else {
+    metaParts.push("—");
+  }
+  dom.heroMeta.replaceChildren();
+  metaParts.forEach((part, index) => {
+    if (index > 0) {
+      const sep = document.createElement("span");
+      sep.className = "meta-sep";
+      sep.textContent = "·";
+      sep.setAttribute("aria-hidden", "true");
+      dom.heroMeta.append(sep);
+    }
+    const span = document.createElement("span");
+    span.textContent = part;
+    dom.heroMeta.append(span);
+  });
+
+  if (!hasData) {
     dom.statPorts.textContent = "—";
     setUnavailable(dom.statEnergy, false);
     dom.statEnergy.textContent = "—";
-    dom.statVin.textContent = "—";
-    dom.statUptime.textContent = "—";
+    dom.statLabel3.textContent = t("inputVoltage");
+    dom.statValue3.textContent = "—";
+    dom.statLabel4.textContent = t("uptime");
+    dom.statValue4.textContent = "—";
     return;
   }
 
@@ -635,146 +1008,443 @@ function renderHero(snapshot) {
   const energyNote = dom.statEnergy.parentElement?.querySelector(".unit-note");
   if (energyNote) energyNote.hidden = !energyAvailable;
 
-  let inputVoltage = Number(totals?.inputVoltageV);
-  if (!Number.isFinite(inputVoltage) && Array.isArray(snapshot.ports)) {
-    const vins = snapshot.ports.map((port) => Number(port.vinMv)).filter((value) => Number.isFinite(value) && value > 0);
-    if (vins.length > 0) inputVoltage = vins.reduce((sum, value) => sum + value, 0) / vins.length / 1000;
+  if (state.multi) {
+    dom.statLabel3.textContent = t("deviceCount");
+    dom.statValue3.textContent = t("devicesOnline", {
+      online: onlineDeviceCount(),
+      total: totalDeviceCount(),
+    });
+    dom.statLabel4.textContent = t("inputVoltage");
+    const average = inputVoltageAverage();
+    const vinAvailable = Number.isFinite(average) && average > 0;
+    dom.statValue4.textContent = vinAvailable ? `${average.toFixed(2)} V` : "—";
+    setUnavailable(dom.statValue4, !vinAvailable, t("energyUnavailable"));
+    dom.statLabel4.removeAttribute("title");
+  } else {
+    dom.statLabel3.textContent = t("inputVoltage");
+    const primary = primaryDevice();
+    let inputVoltage = Number(primary?.totals?.inputVoltageV);
+    if (!Number.isFinite(inputVoltage) || inputVoltage <= 0) {
+      inputVoltage = inputVoltageAverage();
+    }
+    const vinAvailable = Number.isFinite(inputVoltage) && inputVoltage > 0;
+    dom.statValue3.textContent = vinAvailable ? `${inputVoltage.toFixed(2)} V` : "—";
+    setUnavailable(dom.statValue3, !vinAvailable, t("energyUnavailable"));
+    dom.statLabel4.textContent = t("uptime");
+    dom.statValue4.textContent = fmtUptime(Number(primary?.system?.uptimeSeconds));
+    dom.statLabel4.removeAttribute("title");
   }
-  const vinAvailable = Number.isFinite(inputVoltage) && inputVoltage > 0;
-  dom.statVin.textContent = vinAvailable ? `${inputVoltage.toFixed(2)} V` : "—";
-  setUnavailable(dom.statVin, !vinAvailable, t("energyUnavailable"));
-  dom.statUptime.textContent = fmtUptime(Number(snapshot.system?.uptimeSeconds));
 }
 
 /* ------------------------------------------------------------------ */
 /* Port cards                                                         */
 /* ------------------------------------------------------------------ */
 
-function ensurePortCards() {
-  if (state.portNodes.size === PORT_IDS.length) return;
+function createPortCard(device, portId) {
+  const globalId = globalIdFor(device, portId);
+  const li = document.createElement("li");
+  li.className = "port-card";
+  li.dataset.port = String(portId);
+  li.dataset.global = String(globalId);
+  li.style.setProperty("--pc", portColor(portId));
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "port-btn";
+
+  const top = document.createElement("span");
+  top.className = "pc-top";
+  const name = document.createElement("span");
+  name.className = "pc-name";
+  const type = document.createElement("span");
+  type.className = "pc-type";
+  const global = document.createElement("span");
+  global.className = "pc-global";
+  global.textContent = `P${globalId}`;
+  global.hidden = !state.multi;
+  const status = document.createElement("span");
+  status.className = "pc-state";
+  top.append(name, type, global, status);
+
+  const power = document.createElement("span");
+  power.className = "pc-power";
+  const num = document.createElement("span");
+  num.className = "pc-num";
+  const unit = document.createElement("span");
+  unit.className = "pc-w";
+  unit.textContent = "W";
+  power.append(num, unit);
+
+  const meta = document.createElement("span");
+  meta.className = "pc-meta";
+  const proto = document.createElement("span");
+  proto.className = "badge proto-badge";
+  const sub = document.createElement("span");
+  sub.className = "pc-sub";
+  meta.append(proto, sub);
+
+  const foot = document.createElement("span");
+  foot.className = "pc-foot";
+  const energy = document.createElement("span");
+  energy.className = "pc-energy";
+  const time = document.createElement("span");
+  time.className = "pc-time";
+  foot.append(energy, time);
+
+  const spark = document.createElement("canvas");
+  spark.className = "pc-spark";
+  spark.setAttribute("aria-hidden", "true");
+
+  button.append(top, power, meta, foot, spark);
+  li.append(button);
+  button.addEventListener("click", () => openDetail(globalId));
+
+  return { globalId, li, button, name, type, global, status, num, proto, sub, energy, time, spark };
+}
+
+function ensurePortStructure() {
+  const devices = sortedDevices();
+  const signature = `${state.multi ? "m" : "s"}|${devices
+    .map((device) => `${device.index}:${device.host || ""}:${device.device?.name || ""}`)
+    .join("|")}`;
+  if (signature === state.portSignature) return;
+  state.portSignature = signature;
   state.portNodes.clear();
+  state.deviceGroupNodes.clear();
   dom.portGrid.replaceChildren();
 
-  for (const id of PORT_IDS) {
-    const li = document.createElement("li");
-    li.className = "port-card";
-    li.dataset.port = String(id);
-    li.style.setProperty("--pc", portColor(id));
+  for (const device of devices) {
+    const group = document.createElement("section");
+    group.className = "device-group";
+    group.dataset.device = String(device.index);
 
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "port-btn";
+    let head = null;
+    if (state.multi) {
+      head = document.createElement("header");
+      head.className = "device-group-head";
+      const index = document.createElement("span");
+      index.className = "device-group-index";
+      index.textContent = deviceLabel(device);
+      const name = document.createElement("span");
+      name.className = "device-group-name";
+      name.textContent = deviceName(device);
+      const total = document.createElement("span");
+      total.className = "device-group-total";
+      head.append(index, name, total);
+      group.append(head);
+    }
 
-    const top = document.createElement("span");
-    top.className = "pc-top";
-    const name = document.createElement("span");
-    name.className = "pc-name";
-    const type = document.createElement("span");
-    type.className = "pc-type";
-    const status = document.createElement("span");
-    status.className = "pc-state";
-    top.append(name, type, status);
-
-    const power = document.createElement("span");
-    power.className = "pc-power";
-    const num = document.createElement("span");
-    num.className = "pc-num";
-    const unit = document.createElement("span");
-    unit.className = "pc-w";
-    unit.textContent = "W";
-    power.append(num, unit);
-
-    const meta = document.createElement("span");
-    meta.className = "pc-meta";
-    const proto = document.createElement("span");
-    proto.className = "badge proto-badge";
-    const sub = document.createElement("span");
-    sub.className = "pc-sub";
-    meta.append(proto, sub);
-
-    const foot = document.createElement("span");
-    foot.className = "pc-foot";
-    const energy = document.createElement("span");
-    energy.className = "pc-energy";
-    const time = document.createElement("span");
-    time.className = "pc-time";
-    foot.append(energy, time);
-
-    const spark = document.createElement("canvas");
-    spark.className = "pc-spark";
-    spark.setAttribute("aria-hidden", "true");
-
-    button.append(top, power, meta, foot, spark);
-    li.append(button);
-    dom.portGrid.append(li);
-
-    button.addEventListener("click", () => openDetail(id));
-
-    state.portNodes.set(id, { li, button, name, type, status, num, proto, sub, energy, time, spark });
+    const list = document.createElement("ul");
+    list.className = "port-grid";
+    for (const portId of PORT_IDS) {
+      const card = createPortCard(device, portId);
+      state.portNodes.set(card.globalId, { ...card, device, portId });
+      list.append(card.li);
+    }
+    group.append(list);
+    dom.portGrid.append(group);
+    state.deviceGroupNodes.set(Number(device.index), { group, head, name: head?.querySelector(".device-group-name"), total: head?.querySelector(".device-group-total"), device });
   }
 }
 
-function renderPorts(snapshot) {
-  ensurePortCards();
-  const energyAvailable = snapshot?.capabilities?.energy !== false;
+function renderPorts() {
+  ensurePortStructure();
+  const energyAll = energyAvailableAll();
   const now = Date.now();
+  const selectedId = state.selectedPort ? Number(state.selectedPort.globalId) : NaN;
 
-  for (const id of PORT_IDS) {
-    const refs = state.portNodes.get(id);
-    if (!refs) continue;
-    const port = findPort(snapshot, id);
-    const power = Number(port?.powerW);
-    const charging = Boolean(port && port.attached && power >= 0.1 && port.active !== false);
-    const inactive = Boolean(port && port.active === false);
-    const idle = !port || !port.attached || inactive;
-
-    const selectedId =
-      state.selected === null || state.selected === undefined ? NaN : Number(state.selected);
-    refs.li.style.setProperty("--pc", portColor(id));
-    refs.li.classList.toggle("is-charging", charging);
-    refs.li.classList.toggle("is-idle", idle);
-    refs.li.classList.toggle("is-off", inactive);
-    refs.li.classList.toggle("is-selected", selectedId === id);
-
-    refs.name.textContent = port?.name || portName(id);
-    refs.type.textContent = t((port?.type || portType(id)) === "A" ? "portTypeA" : "portTypeC");
-    refs.status.textContent = stateText(port);
-    refs.status.dataset.tone = stateTone(port);
-    refs.num.textContent = port ? powerParts(power) : "—";
-    refs.proto.textContent = port ? protocolLabel(port) : "—";
-    refs.sub.textContent = port && port.attached ? `${fmtVolts(Number(port.voltageMv))} · ${fmtAmps(Number(port.currentMa))}` : "—";
-
-    if (!energyAvailable) {
-      refs.energy.textContent = "—";
-      refs.energy.title = t("energyUnavailable");
-      refs.time.textContent = "—";
-      refs.time.removeAttribute("title");
-    } else if (port && port.attached) {
-      refs.energy.textContent = `≈ ${fmtEnergy(Number(port.sessionWh))}`;
-      refs.energy.title = t("energyTip");
-      refs.time.textContent = fmtDuration(Number(port.chargingSeconds));
-      refs.time.title = t("chargeTime");
-    } else {
-      refs.energy.textContent = "—";
-      refs.energy.removeAttribute("title");
-      refs.time.textContent = "—";
-      refs.time.removeAttribute("title");
+  for (const device of sortedDevices()) {
+    const groupRefs = state.deviceGroupNodes.get(Number(device.index));
+    if (groupRefs?.total) {
+      const charging = Number(device.totals?.chargingCount) || 0;
+      groupRefs.total.textContent = `${fmtWatts(Number(device.totals?.powerW))} · ${t("groupCharging", { n: charging })}`;
     }
 
-    refs.button.setAttribute(
-      "aria-label",
-      t("portAria", {
-        name: port?.name || portName(id),
-        power: port ? fmtWatts(power) : "—",
-        state: stateText(port),
-      }),
-    );
+    for (const portId of PORT_IDS) {
+      const globalId = globalIdFor(device, portId);
+      const refs = state.portNodes.get(globalId);
+      if (!refs) continue;
+      const port = findPort(device, portId);
+      const power = Number(port?.powerW);
+      const charging = Boolean(port && port.attached && power >= 0.1 && port.active !== false);
+      const inactive = Boolean(port && port.active === false);
+      const idle = !port || !port.attached || inactive;
+      const energyAvailable = device.capabilities?.energy !== false;
 
-    const series = state.store?.series().find((entry) => entry.id === id);
-    if (series && refs.spark.offsetParent !== null) {
-      const samples = series.samples.filter((sample) => sample.t >= now - 30 * 60 * 1000);
-      drawSparkline(refs.spark, samples, portColor(id));
+      refs.li.style.setProperty("--pc", portColor(portId));
+      refs.li.classList.toggle("is-charging", charging);
+      refs.li.classList.toggle("is-idle", idle);
+      refs.li.classList.toggle("is-off", inactive);
+      refs.li.classList.toggle("is-selected", selectedId === globalId);
+      refs.global.hidden = !state.multi;
+
+      refs.name.textContent = port?.name || portName(portId);
+      refs.type.textContent = t((port?.type || portType(portId)) === "A" ? "portTypeA" : "portTypeC");
+      refs.status.textContent = stateText(port);
+      refs.status.dataset.tone = stateTone(port);
+      refs.num.textContent = port ? powerParts(power) : "—";
+      refs.proto.textContent = port ? protocolLabel(port) : "—";
+      refs.sub.textContent =
+        port && port.attached
+          ? `${fmtVolts(Number(port.voltageMv))} · ${fmtAmps(Number(port.currentMa))}`
+          : "—";
+
+      if (!energyAvailable) {
+        refs.energy.textContent = "—";
+        refs.energy.title = t("energyUnavailable");
+        refs.time.textContent = "—";
+        refs.time.removeAttribute("title");
+      } else if (port && port.attached) {
+        refs.energy.textContent = `≈ ${fmtEnergy(Number(port.sessionWh))}`;
+        refs.energy.title = t("energyTip");
+        refs.time.textContent = fmtDuration(Number(port.chargingSeconds));
+        refs.time.title = t("chargeTime");
+      } else {
+        refs.energy.textContent = "—";
+        refs.energy.removeAttribute("title");
+        refs.time.textContent = "—";
+        refs.time.removeAttribute("title");
+      }
+
+      refs.button.setAttribute(
+        "aria-label",
+        `${state.multi ? `${deviceLabel(device)} ` : ""}${t("portAria", {
+          name: port?.name || portName(portId),
+          power: port ? fmtWatts(power) : "—",
+          state: stateText(port),
+        })}`,
+      );
+
+      const store = state.stores.get(deviceKey(device));
+      const series = store?.series().find((entry) => entry.id === portId);
+      if (series && refs.spark.offsetParent !== null) {
+        const samples = series.samples.filter((sample) => sample.t >= now - 30 * 60 * 1000);
+        drawSparkline(refs.spark, samples, portColor(portId));
+      }
     }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Simple view (official app style)                                   */
+/* ------------------------------------------------------------------ */
+
+function renderSimple() {
+  dom.simpleWrap.replaceChildren();
+  const devices = sortedDevices();
+  if (devices.length === 0) return;
+
+  const totals = aggregateTotals();
+  const budget = Number(totals?.budgetW) || 160 * devices.length;
+  const ports = Number(totals?.portCount) || 5 * devices.length;
+  const summary = document.createElement("div");
+  summary.className = "simple-summary";
+  const cap = document.createElement("span");
+  cap.className = "simple-cap";
+  cap.textContent = t("capacityLabel", { budget: Math.round(budget), ports });
+  const charging = document.createElement("span");
+  charging.className = "simple-charging";
+  charging.textContent = t("devicesCharging", { n: chargingDeviceCount() });
+  summary.append(cap, charging);
+  dom.simpleWrap.append(summary);
+
+  for (const device of devices) {
+    const group = document.createElement("section");
+    group.className = "simple-group";
+
+    if (state.multi) {
+      const head = document.createElement("div");
+      head.className = "simple-group-head";
+      const label = document.createElement("span");
+      label.className = "sg-label";
+      label.textContent = deviceLabel(device);
+      const name = document.createElement("span");
+      name.className = "sg-name";
+      name.textContent = deviceName(device);
+      const total = document.createElement("span");
+      total.className = "sg-total";
+      total.textContent = `${fmtWatts(Number(device.totals?.powerW))} · ${t("groupCharging", {
+        n: Number(device.totals?.chargingCount) || 0,
+      })}`;
+      head.append(label, name, total);
+      group.append(head);
+    }
+
+    const rows = document.createElement("div");
+    rows.className = "simple-rows";
+    const deviceBudget = Number(device.totals?.budgetW) || 160;
+
+    for (const portId of PORT_IDS) {
+      const port = findPort(device, portId);
+      const globalId = globalIdFor(device, portId);
+      const power = Number(port?.powerW) || 0;
+      const capability = portCapability(device, portId);
+      const trackPct = Math.max(6, Math.min(100, (capability / deviceBudget) * 100));
+      const fillPct = capability > 0 ? Math.max(0, Math.min(100, (power / capability) * 100)) : 0;
+
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "simple-row";
+      row.style.setProperty("--pc", portColor(portId));
+      row.setAttribute(
+        "aria-label",
+        `${state.multi ? `${deviceLabel(device)} ` : ""}${t("portAria", {
+          name: port?.name || portName(portId),
+          power: fmtWatts(power),
+          state: stateText(port),
+        })}`,
+      );
+      row.addEventListener("click", () => openDetail(globalId));
+
+      const portLabel = document.createElement("span");
+      portLabel.className = "simple-port";
+      const dot = document.createElement("span");
+      dot.className = "simple-dot";
+      const text = document.createElement("span");
+      text.textContent = port?.name || portName(portId);
+      portLabel.append(dot, text);
+
+      const trackWrap = document.createElement("span");
+      trackWrap.className = "simple-track-wrap";
+      const track = document.createElement("span");
+      track.className = "simple-track";
+      track.style.width = `${trackPct}%`;
+      const fill = document.createElement("span");
+      fill.className = "simple-fill";
+      fill.style.width = `${fillPct}%`;
+      track.append(fill);
+      trackWrap.append(track);
+
+      const value = document.createElement("span");
+      value.className = "simple-val";
+      const strong = document.createElement("b");
+      strong.textContent = powerParts(power);
+      value.append(strong, document.createTextNode(" W "));
+      const proto = document.createElement("span");
+      proto.className = "simple-proto";
+      proto.textContent = protocolLabel(port);
+      value.append(proto);
+
+      row.append(portLabel, trackWrap, value);
+      rows.append(row);
+    }
+    group.append(rows);
+    dom.simpleWrap.append(group);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Pro view diagrams                                                  */
+/* ------------------------------------------------------------------ */
+
+function destroyDiagrams() {
+  for (const entry of state.diagrams.values()) entry.diagram.destroy();
+  state.diagrams.clear();
+  state.diagramSignature = "";
+  dom.diagramWrap.replaceChildren();
+}
+
+function ensureDiagrams() {
+  const devices = sortedDevices();
+  const signature = `${state.multi ? "m" : "s"}|${devices
+    .map((device) => `${device.index}:${device.host || ""}`)
+    .join("|")}`;
+  if (signature === state.diagramSignature && state.diagrams.size === devices.length) return;
+  destroyDiagrams();
+  state.diagramSignature = signature;
+
+  const grid = document.createElement("div");
+  grid.className = `diagram-grid${state.multi ? "" : " is-single"}`;
+
+  for (const device of devices) {
+    const card = document.createElement("div");
+    card.className = "device-diagram";
+
+    let total = null;
+    if (state.multi) {
+      const head = document.createElement("div");
+      head.className = "device-diagram-head";
+      const label = document.createElement("span");
+      label.className = "dd-label";
+      label.textContent = deviceLabel(device);
+      const name = document.createElement("span");
+      name.className = "dd-name";
+      name.textContent = deviceName(device);
+      total = document.createElement("span");
+      total.className = "dd-total";
+      head.append(label, name, total);
+      card.append(head);
+    }
+
+    const canvas = document.createElement("div");
+    canvas.className = "device-diagram-canvas";
+    card.append(canvas);
+    grid.append(card);
+
+    const index = Number(device.index);
+    const diagram = createDiagram(canvas, {
+      monochrome: true,
+      onSelect: (portId) => openDetail(globalIdFor(device, portId)),
+      describe: (port, id) =>
+        `${state.multi ? `${deviceLabel(device)} ` : ""}${t("portAria", {
+          name: port?.name || portName(id),
+          power: port ? fmtWatts(Number(port.powerW)) : "—",
+          state: stateText(port),
+        })}`,
+    });
+    state.diagrams.set(index, { diagram, card, total });
+  }
+  dom.diagramWrap.append(grid);
+}
+
+function renderDiagrams() {
+  ensureDiagrams();
+  for (const device of sortedDevices()) {
+    const entry = state.diagrams.get(Number(device.index));
+    if (!entry) continue;
+    const selectedPortId =
+      state.selectedPort && Number(state.selectedPort.deviceIndex) === Number(device.index)
+        ? Number(state.selectedPort.portId)
+        : null;
+    entry.diagram.update(device, { selected: selectedPortId });
+    if (entry.total) {
+      entry.total.textContent = `${fmtWatts(Number(device.totals?.powerW))} · ${t("groupCharging", {
+        n: Number(device.totals?.chargingCount) || 0,
+      })}`;
+    }
+  }
+}
+
+function replayFlow() {
+  for (const entry of state.diagrams.values()) entry.diagram.replay();
+}
+
+/* ------------------------------------------------------------------ */
+/* Flow view (pro / simple)                                           */
+/* ------------------------------------------------------------------ */
+
+function setView(view) {
+  if (view !== "pro" && view !== "simple") return;
+  state.view = view;
+  saveSettings({ view });
+  state.settings = effectiveSettings();
+  renderFlow();
+}
+
+function renderFlow() {
+  const pro = state.view !== "simple";
+  dom.replayBtn.hidden = !pro;
+  dom.diagramWrap.hidden = !pro;
+  dom.simpleWrap.hidden = pro;
+  dom.flowSub.textContent = t(pro ? "flowSub" : "flowSubSimple");
+  for (const button of dom.viewTabs.querySelectorAll(".seg-btn")) {
+    button.setAttribute("aria-pressed", String(button.dataset.view === state.view));
+  }
+  if (pro) {
+    renderDiagrams();
+  } else {
+    destroyDiagrams();
+    renderSimple();
   }
 }
 
@@ -804,21 +1474,38 @@ function sysGroup(title, rows) {
   return group;
 }
 
-function renderSystem(snapshot) {
-  const device = snapshot?.device || {};
-  const system = snapshot?.system || {};
-  const wifi = snapshot?.wifi || {};
-  const source = snapshot?.source || "";
-  const energyAvailable = snapshot?.capabilities?.energy !== false;
-  const isProm = source === "prometheus" || snapshot?.capabilities?.prometheus === true;
+function renderSystem() {
+  const primary = primaryDevice();
+  const device = primary?.device || {};
+  const system = primary?.system || {};
+  const wifi = primary?.wifi || {};
+  const source = primary?.source || "";
+  const energyAvailable = energyAvailableAll();
+  const isProm =
+    state.devices.some((item) => item.source === "prometheus" || item.capabilities?.prometheus === true);
 
-  dom.sourceBadge.textContent = snapshot ? sourceLabel(source) : "—";
-  dom.sourceBadge.dataset.source = source || "";
-  dom.promNote.hidden = !snapshot || (!isProm && energyAvailable);
+  dom.sourceBadge.textContent = primary
+    ? state.multi
+      ? t("multiBadge", { n: state.devices.length })
+      : sourceLabel(source)
+    : "—";
+  dom.sourceBadge.dataset.source = state.multi ? "multi" : source || "";
+  dom.promNote.hidden = !primary || (!isProm && energyAvailable);
 
   const groups = [];
+  if (state.multi && state.devices.length) {
+    groups.push(
+      sysGroup(
+        t("systemMultiDevices"),
+        state.devices.map((item) => [
+          deviceLabel(item),
+          `${deviceName(item)} · ${fmtWatts(Number(item.totals?.powerW))} · ${t("online")}`,
+        ]),
+      ),
+    );
+  }
 
-  if (snapshot) {
+  if (primary) {
     groups.push(
       sysGroup(t("sysDevice"), [
         [t("labelPsn"), state.demo ? device.psn || "—" : maskPsn(device.psn)],
@@ -830,7 +1517,7 @@ function renderSystem(snapshot) {
         ],
         [t("labelColor"), device.color],
         [t("labelHw"), device.hwRev],
-        [t("labelHost"), snapshot.host || hostForRequests() || "—"],
+        [t("labelHost"), primary.host || hostForRequests() || "—"],
       ]),
       sysGroup(t("sysFirmware"), [
         [t("labelApp"), system.appVersion || device.esp32Version],
@@ -853,18 +1540,18 @@ function renderSystem(snapshot) {
         [t("labelRssi"), fmtRssi(Number(wifi.rssi))],
         [t("labelChannel"), wifi.channel],
         [t("labelBssid"), maskMac(wifi.bssid)],
-        [t("labelLatency"), Number.isFinite(snapshot.latencyMs) ? `${snapshot.latencyMs} ms` : "—"],
-        [t("labelUpdated"), fmtClock(snapshot.fetchedAt)],
+        [t("labelLatency"), Number.isFinite(state.aggregate?.latencyMs) ? `${state.aggregate.latencyMs} ms` : "—"],
+        [t("labelUpdated"), fmtClock(state.aggregate?.fetchedAt || primary.fetchedAt)],
       ]),
       sysGroup(t("sysSource"), [
         [t("sysSource"), sourceLabel(source)],
-        [t("labelHost"), snapshot.host || hostForRequests() || "—"],
-        [t("portsLabel"), `${Array.isArray(snapshot.ports) ? snapshot.ports.length : 0} / 5`],
-        [t("labelUpdated"), fmtDateTime(snapshot.fetchedAt)],
+        [t("labelHost"), primary.host || hostForRequests() || "—"],
+        [t("portsLabel"), `${state.devices.reduce((sum, item) => sum + (item.ports?.length || 5), 0)} 口`],
+        [t("deviceCount"), `${state.devices.length} / ${totalDeviceCount()}`],
+        [t("labelUpdated"), fmtDateTime(state.aggregate?.fetchedAt || primary.fetchedAt)],
       ]),
     );
   }
-
   dom.sysGrid.replaceChildren(...groups);
 }
 
@@ -872,22 +1559,22 @@ function renderSystem(snapshot) {
 /* Chart                                                              */
 /* ------------------------------------------------------------------ */
 
-function computeTotal(ports) {
+function computeTotal(seriesList) {
   const times = new Set();
-  for (const port of ports) {
-    for (const sample of port.samples || []) {
+  for (const series of seriesList) {
+    for (const sample of series.samples || []) {
       if (Number.isFinite(sample.t)) times.add(sample.t);
     }
   }
   const sorted = [...times].sort((a, b) => a - b);
   if (sorted.length === 0) return [];
-  const cursors = ports.map(() => 0);
+  const cursors = seriesList.map(() => 0);
   const maxGap = 90000;
   const result = [];
   for (const t of sorted) {
     let sum = 0;
-    for (let i = 0; i < ports.length; i += 1) {
-      const samples = ports[i].samples || [];
+    for (let i = 0; i < seriesList.length; i += 1) {
+      const samples = seriesList[i].samples || [];
       while (cursors[i] + 1 < samples.length && samples[cursors[i] + 1].t <= t) cursors[i] += 1;
       const sample = samples[cursors[i]];
       if (sample && sample.t <= t && t - sample.t <= maxGap) sum += Number(sample.powerW) || 0;
@@ -897,27 +1584,47 @@ function computeTotal(ports) {
   return result;
 }
 
-function visibleSeriesIds() {
-  return ["total", ...PORT_IDS.map(String)].filter((id) => !state.hidden.has(id));
-}
-
 function buildChartData() {
-  const ports = (state.store?.series() || []).map((port) => ({
-    id: port.id,
+  if (state.multi) {
+    const lines = [];
+    const deviceTotals = [];
+    for (const device of sortedDevices()) {
+      const store = state.stores.get(deviceKey(device));
+      const series = store?.series() || [];
+      const total = computeTotal(series);
+      lines.push({
+        id: `dev${device.index}`,
+        name: t("chartLegendDevice", { n: Number(device.index) + 1 }),
+        color: chartDeviceColor(device.index),
+        samples: total,
+      });
+      deviceTotals.push({ samples: total });
+    }
+    return { lines, total: computeTotal(deviceTotals) };
+  }
+
+  const store = primaryStore();
+  const series = store?.series() || [];
+  const lines = series.map((port) => ({
+    id: String(port.id),
     name: port.name || portName(port.id),
     color: chartPortColor(port.id),
     samples: port.samples || [],
   }));
-  return { ports, total: computeTotal(ports) };
+  return { lines, total: computeTotal(series) };
 }
 
-function buildLegend(force = false) {
+function visibleSeriesIds() {
+  return state.chartLineIds.filter((id) => !state.hidden.has(id));
+}
+
+function buildLegend() {
   const items = [
     { id: "total", label: t("chartTotal"), color: cssVar("--chart-total", "#b45309") },
-    ...PORT_IDS.map((id) => ({ id: String(id), label: portName(id), color: chartPortColor(id) })),
+    ...state.chartSeriesMeta,
   ];
   const signature = items.map((item) => `${item.id}:${item.label}:${item.color}`).join("|");
-  if (!force && signature === state.legendSignature) return;
+  if (signature === state.legendSignature) return;
   state.legendSignature = signature;
   dom.chartLegend.replaceChildren();
 
@@ -949,11 +1656,13 @@ function buildLegend(force = false) {
 
 function refreshChart() {
   if (!state.chart) return;
+  const { lines, total } = buildChartData();
+  state.chartSeriesMeta = lines.map((line) => ({ id: line.id, label: line.name, color: line.color }));
+  state.chartLineIds = ["total", ...lines.map((line) => line.id)];
   buildLegend();
-  const { ports, total } = buildChartData();
   state.chart.setLabels({ total: t("chartTotal") });
   state.chart.setData({
-    ports,
+    ports: lines,
     total,
     rangeMs: RANGES[state.range] || RANGES["30m"],
     now: Date.now(),
@@ -981,26 +1690,6 @@ function setRange(range) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Diagram                                                            */
-/* ------------------------------------------------------------------ */
-
-function buildDiagram() {
-  state.diagram = createDiagram(dom.diagramWrap, {
-    onSelect: (id) => openDetail(id),
-    describe: (port, id) =>
-      t("portAria", {
-        name: port?.name || portName(id),
-        power: port ? fmtWatts(Number(port.powerW)) : "—",
-        state: stateText(port),
-      }),
-  });
-}
-
-function renderDiagram(snapshot) {
-  state.diagram?.update(snapshot, { selected: state.selected });
-}
-
-/* ------------------------------------------------------------------ */
 /* Port detail                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -1018,14 +1707,22 @@ function detailItem(label, value, { unavailable = false, title = "" } = {}) {
 }
 
 function updateDetail() {
-  if (!state.detailOpen || state.selected === null) return;
-  const id = Number(state.selected);
-  const port = findPort(state.snapshot, id);
-  const snapshot = state.snapshot;
-  const energyAvailable = snapshot?.capabilities?.energy !== false;
-  const color = portColor(id);
+  if (!state.detailOpen || !state.selectedPort) return;
+  const resolved = resolvePort(state.selectedPort.globalId);
+  if (!resolved) {
+    dom.detailTitle.textContent = "—";
+    dom.detailDevice.textContent = "";
+    return;
+  }
+  const { device, port } = resolved;
+  const portId = Number(port.id);
+  const energyAvailable = device.capabilities?.energy !== false;
+  const color = portColor(portId);
 
-  dom.detailTitle.textContent = port?.name || portName(id);
+  dom.detailTitle.textContent = port?.name || portName(portId);
+  dom.detailDevice.textContent = state.multi
+    ? `${deviceLabel(device)} · ${deviceName(device)} · ${device.host || ""}`
+    : deviceName(device);
   dom.detailDot.style.setProperty("--pc", color);
   dom.detailState.textContent = stateText(port);
   dom.detailState.dataset.tone = stateTone(port);
@@ -1033,7 +1730,7 @@ function updateDetail() {
   dom.detailProto.textContent = port ? protocolLabel(port) : "—";
   dom.detailProto.style.setProperty("--pc", color);
 
-  const deviceMax = Number(snapshot?.device?.portMaxW?.[id]);
+  const deviceMax = Number(device.device?.portMaxW?.[portId]);
   const portBudget = Number(port?.powerBudgetW);
   const limit = Math.max(Number.isFinite(deviceMax) ? deviceMax : 0, Number.isFinite(portBudget) ? portBudget : 0);
 
@@ -1055,7 +1752,8 @@ function updateDetail() {
   ];
   dom.detailGrid.replaceChildren(...items);
 
-  const series = state.store?.series().find((entry) => entry.id === id);
+  const store = state.stores.get(deviceKey(device));
+  const series = store?.series().find((entry) => entry.id === portId);
   const samples = (series?.samples || []).filter((sample) => sample.t >= Date.now() - 30 * 60 * 1000);
   const peak = samples.reduce((max, sample) => Math.max(max, Number(sample.powerW) || 0), 0);
   dom.detailSparkMeta.textContent = samples.length
@@ -1066,14 +1764,18 @@ function updateDetail() {
   }
 }
 
-function openDetail(id) {
-  if (state.detailOpen && Number(state.selected) === Number(id)) return;
-  state.selected = Number(id);
+function openDetail(globalId) {
+  const resolved = resolvePort(globalId);
+  if (!resolved) return;
+  const key = Number(globalId);
+  if (state.detailOpen && state.selectedPort?.globalId === key) return;
+  const { device, port } = resolved;
+  state.selectedPort = { globalId: key, deviceIndex: Number(device.index), portId: Number(port.id) };
   state.detailOpen = true;
   state.detailReturnFocus = document.activeElement;
   updateDetail();
-  renderDiagram(state.snapshot);
-  renderPorts(state.snapshot);
+  renderDiagrams();
+  renderPorts();
 
   dom.detailLayer.hidden = false;
   document.body.classList.add("no-scroll");
@@ -1094,9 +1796,9 @@ function closeDetail() {
   window.setTimeout(() => {
     if (state.detailOpen) return;
     dom.detailLayer.hidden = true;
-    state.selected = null;
-    renderDiagram(state.snapshot);
-    renderPorts(state.snapshot);
+    state.selectedPort = null;
+    renderDiagrams();
+    renderPorts();
     const focusTarget = state.detailReturnFocus;
     if (focusTarget && typeof focusTarget.focus === "function") {
       focusTarget.focus({ preventScroll: true });
@@ -1128,7 +1830,229 @@ function onSheetKeydown(event) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Settings                                                           */
+/* Device dialog                                                      */
+/* ------------------------------------------------------------------ */
+
+function deviceDialogVisibleList() {
+  if (state.demo) {
+    return state.devices.map((device) => ({
+      host: device.host,
+      name: deviceName(device),
+      psn: device.device?.psn || "",
+      modelLabel: device.device?.modelLabel || "",
+      lastSeen: device.fetchedAt,
+      demo: true,
+      index: device.index,
+    }));
+  }
+  return savedDevices();
+}
+
+function renderDeviceDialog() {
+  const demo = state.demo;
+  const multi = state.deviceDialogMode === "multi";
+  for (const button of dom.deviceModeTabs.querySelectorAll(".seg-btn")) {
+    button.setAttribute("aria-pressed", String(button.dataset.mode === state.deviceDialogMode));
+  }
+  const list = deviceDialogVisibleList();
+  dom.deviceModeHint.textContent = multi
+    ? t("multiHint")
+    : savedDevices().length < 2 && !demo
+      ? t("multiDisabled")
+      : "";
+  dom.savedCount.textContent = `${list.length}`;
+  dom.deviceApplyMulti.hidden = demo || !multi;
+  dom.deviceApplyMulti.disabled = state.multiDraft.size < 2;
+  dom.savedDeviceList.replaceChildren();
+
+  if (list.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "device-empty";
+    empty.textContent = t("noSavedDevices");
+    dom.savedDeviceList.append(empty);
+  }
+
+  const activeHost = state.settings?.host || "";
+  const multiHosts = new Set(state.multiDraft);
+
+  for (const device of list) {
+    const row = document.createElement("li");
+    row.className = "device-row";
+    if (activeHost === device.host) row.classList.add("is-active");
+
+    const checkboxId = `dev-${String(device.host).replace(/[^a-z0-9]/gi, "-")}`;
+    if (multi && !demo) {
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.id = checkboxId;
+      checkbox.checked = multiHosts.has(device.host);
+      checkbox.setAttribute("aria-label", device.name || device.host);
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) state.multiDraft.add(device.host);
+        else state.multiDraft.delete(device.host);
+        dom.deviceApplyMulti.disabled = state.multiDraft.size < 2;
+      });
+      row.append(checkbox);
+    }
+
+    const main = document.createElement("div");
+    main.className = "device-row-main";
+    const name = document.createElement("p");
+    name.className = "device-name";
+    name.textContent = device.name || device.host;
+    const meta = document.createElement("p");
+    meta.className = "device-meta";
+    meta.textContent = [
+      device.host,
+      device.psn ? `PSN ${state.demo ? device.psn : maskPsn(device.psn)}` : "",
+      device.modelLabel ? device.modelLabel.replace(/（[^）]*）|\([^)]*\)/g, "").trim() : "",
+      Number.isFinite(device.lastSeen) ? `${t("lastSeen")} ${fmtClock(device.lastSeen)}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    main.append(name, meta);
+    row.append(main);
+
+    if (!demo && !multi) {
+      const use = document.createElement("button");
+      use.type = "button";
+      use.className = "btn btn-soft btn-sm";
+      use.textContent = activeHost === device.host ? t("selectedDevice") : t("selectDevice");
+      use.disabled = activeHost === device.host;
+      use.addEventListener("click", () => {
+        setActiveDevice(device.host);
+        state.settings = effectiveSettings();
+        closeDeviceDialog();
+        reinitializeData();
+      });
+      row.append(use);
+    }
+
+    if (!demo) {
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "icon-btn";
+      remove.setAttribute("aria-label", `${t("removeDevice")} ${device.name || device.host}`);
+      remove.innerHTML =
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M7 7l1 12h8l1-12M10 11v5M14 11v5"/></svg>';
+      remove.addEventListener("click", () => {
+        removeDevice(device.host);
+        state.settings = effectiveSettings();
+        state.multiDraft.delete(device.host);
+        renderDeviceDialog();
+        reinitializeData();
+      });
+      row.append(remove);
+    }
+
+    dom.savedDeviceList.append(row);
+  }
+
+  // Scan results
+  dom.deviceScanBtn.disabled = state.deviceScan.scanning;
+  dom.deviceScanBtn.textContent = state.deviceScan.scanning ? t("scanning") : t("scanLan");
+  dom.deviceScanStatus.textContent = state.deviceScan.statusKey
+    ? t(state.deviceScan.statusKey, state.deviceScan.statusVars || undefined)
+    : "";
+  dom.deviceScanList.replaceChildren();
+  for (const device of state.deviceScan.results) {
+    const known = savedDevices().some(
+      (item) =>
+        item.host === (device.host || device.ip) ||
+        (device.psn && item.psn === device.psn),
+    );
+    const item = document.createElement("li");
+    item.className = "scan-item";
+    const text = document.createElement("div");
+    text.className = "scan-item-text";
+    const name = document.createElement("p");
+    name.className = "scan-name";
+    name.textContent = device.name || device.host || device.ip || "—";
+    const meta = document.createElement("p");
+    meta.className = "scan-meta";
+    meta.textContent = [
+      device.host || device.ip,
+      device.psn ? `PSN ${maskPsn(device.psn)}` : "",
+      Number.isFinite(Number(device.rssi)) ? fmtRssi(Number(device.rssi)) : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    text.append(name, meta);
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "btn btn-soft btn-sm";
+    add.textContent = known ? t("selectedDevice") : t("add");
+    add.disabled = known;
+    add.addEventListener("click", () => addDeviceEntry(device, { use: savedDevices().length === 0 }));
+    item.append(text, add);
+    dom.deviceScanList.append(item);
+  }
+
+  dom.demoOneLink.href = urlWithDemo(1);
+  dom.demoTwoLink.href = urlWithDemo(2);
+}
+
+function openDeviceDialog() {
+  state.deviceDialogMode = state.demo
+    ? state.devices.length > 1
+      ? "multi"
+      : "single"
+    : state.settings.multi
+      ? "multi"
+      : "single";
+  state.multiDraft = new Set(state.settings.multiHosts || []);
+  state.deviceScan = { scanning: false, results: [], statusKey: "", error: null };
+  renderDeviceDialog();
+  if (typeof dom.deviceDialog.showModal === "function") {
+    if (!dom.deviceDialog.open) dom.deviceDialog.showModal();
+  } else {
+    dom.deviceDialog.setAttribute("open", "");
+  }
+}
+
+function closeDeviceDialog() {
+  if (typeof dom.deviceDialog.close === "function" && dom.deviceDialog.open) dom.deviceDialog.close();
+  else dom.deviceDialog.removeAttribute("open");
+}
+
+async function startDeviceScan() {
+  if (state.deviceScan.scanning) return;
+  state.deviceScan.scanning = true;
+  state.deviceScan.statusKey = "discoveryScanning";
+  renderDeviceDialog();
+  try {
+    const result = await scanLan();
+    state.deviceScan.results = Array.isArray(result?.devices) ? result.devices : [];
+    state.deviceScan.statusKey = state.deviceScan.results.length ? "discoveryFound" : "discoveryEmpty";
+    state.deviceScan.statusVars = { n: state.deviceScan.results.length };
+    state.deviceScan.error = null;
+  } catch (error) {
+    state.deviceScan.results = [];
+    state.deviceScan.statusKey = isProxyError(error) ? "scanProxyMissing" : "discoveryError";
+    state.deviceScan.error = error;
+  } finally {
+    state.deviceScan.scanning = false;
+    renderDeviceDialog();
+  }
+}
+
+function addManualDevice(input, { use = false } = {}) {
+  const host = input.value.trim();
+  if (!host) return;
+  upsertDevice({ host, lastSeen: Date.now() });
+  state.settings = effectiveSettings();
+  input.value = "";
+  renderDeviceDialog();
+  if (use && !state.lastGood) {
+    setActiveDevice(host);
+    state.settings = effectiveSettings();
+    closeDeviceDialog();
+    reinitializeData();
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Settings dialog                                                    */
 /* ------------------------------------------------------------------ */
 
 function closestIntervalOption(value) {
@@ -1246,10 +2170,13 @@ async function startScan() {
         name.textContent = device.name || device.host || device.ip || "—";
         const meta = document.createElement("p");
         meta.className = "scan-meta";
-        meta.textContent = t("scanDeviceMeta", {
-          ip: device.ip || device.host || "—",
-          psn: device.psn ? maskPsn(device.psn) : "—",
-        });
+        meta.textContent = [
+          device.host || device.ip,
+          device.psn ? `PSN ${maskPsn(device.psn)}` : "",
+          Number.isFinite(Number(device.rssi)) ? fmtRssi(Number(device.rssi)) : "",
+        ]
+          .filter(Boolean)
+          .join(" · ");
         text.append(name, meta);
         const use = document.createElement("button");
         use.type = "button";
@@ -1274,15 +2201,9 @@ async function startScan() {
   }
 }
 
-function restartPolling() {
-  state.gen += 1;
-  window.clearTimeout(state.timer);
-  state.timer = 0;
-  state.backoff = 0;
-  state.polling = false;
-  state.refreshQueued = false;
-  if (!document.hidden) poll();
-}
+/* ------------------------------------------------------------------ */
+/* Language / settings actions                                        */
+/* ------------------------------------------------------------------ */
 
 function applyLanguage(language, { persist = true } = {}) {
   if (persist) saveSettings({ lang: language });
@@ -1290,8 +2211,8 @@ function applyLanguage(language, { persist = true } = {}) {
   setLang(state.settings.lang);
   applyI18n(document);
   updateStaticTranslations();
-  state.diagram?.refreshLabels();
-  buildLegend(true);
+  for (const entry of state.diagrams.values()) entry.diagram.refreshLabels();
+  state.legendSignature = "";
   renderAll();
 }
 
@@ -1299,6 +2220,8 @@ function handleSave(event) {
   event.preventDefault();
   const previousHost = hostForRequests();
   const previousMode = modeForRequests();
+  const previousMulti = Boolean(state.settings.multi);
+  const previousHosts = (state.settings.multiHosts || []).join(",");
   const patch = {
     host: dom.setHost.value.trim(),
     mode: dom.setMode.value,
@@ -1306,11 +2229,16 @@ function handleSave(event) {
     theme: dom.setTheme.value,
     lang: dom.setLang.value,
     window: state.range,
+    view: state.view,
   };
   saveSettings(patch);
   state.settings = effectiveSettings();
   state.demo = state.settings.demo;
-  const hostChanged = hostForRequests() !== previousHost || modeForRequests() !== previousMode;
+  const needsReset =
+    hostForRequests() !== previousHost ||
+    modeForRequests() !== previousMode ||
+    Boolean(state.settings.multi) !== previousMulti ||
+    (state.settings.multiHosts || []).join(",") !== previousHosts;
 
   setLang(state.settings.lang);
   applyTheme(state.settings.theme);
@@ -1318,106 +2246,189 @@ function handleSave(event) {
   updateStaticTranslations();
   closeSettings();
 
-  if (hostChanged) {
-    state.gen += 1;
-    window.clearTimeout(state.timer);
-    state.timer = 0;
-    state.snapshot = null;
-    state.lastGood = null;
-    state.lastGoodAt = 0;
-    state.lastError = null;
-    state.lastErrorCode = "";
-    state.loading = true;
-    state.chartHasData = false;
-    state.historySeeded = false;
-    state.store = newHistoryStore();
-    if (state.demo) seedDemoHistory();
-    else seedLiveHistory();
+  if (needsReset) {
+    reinitializeData();
+  } else {
+    renderAll();
+    restartPolling();
   }
-
-  buildLegend(true);
-  renderAll();
-  restartPolling();
 }
 
 function handleReset() {
   resetSettings();
   state.settings = effectiveSettings();
   state.demo = state.settings.demo;
+  state.demoCount = state.settings.demoDevices || 1;
   setLang(state.settings.lang);
   applyTheme(state.settings.theme);
   applyI18n(document);
   updateStaticTranslations();
   populateSettingsForm();
   closeSettings();
-  state.snapshot = null;
-  state.lastGood = null;
-  state.lastGoodAt = 0;
-  state.lastError = null;
-  state.loading = true;
-  state.chartHasData = false;
-  state.store = newHistoryStore();
-  if (state.demo) seedDemoHistory();
-  else seedLiveHistory();
-  renderAll();
-  restartPolling();
+  closeDeviceDialog();
+  reinitializeData();
 }
 
 /* ------------------------------------------------------------------ */
 /* Data flow                                                          */
 /* ------------------------------------------------------------------ */
 
-function applySnapshot(snapshot) {
-  state.snapshot = snapshot;
-  state.lastGood = snapshot;
+function normalizeDevice(raw, position) {
+  const index = Number.isInteger(Number(raw?.index)) ? Number(raw.index) : position;
+  const ports = (Array.isArray(raw?.ports) ? raw.ports : []).map((port) => ({
+    ...port,
+    deviceIndex: index,
+    globalId: Number.isFinite(Number(port.globalId)) ? Number(port.globalId) : index * 5 + Number(port.id),
+  }));
+  return {
+    ...raw,
+    index,
+    label: raw?.label || deviceLabel({ index }),
+    ports,
+    host: raw?.host || `slot-${index}`,
+  };
+}
+
+function applyAggregate(payload) {
+  const rawDevices = Array.isArray(payload?.devices) ? payload.devices : [];
+  const devices = rawDevices.map((device, index) => normalizeDevice(device, index));
+  const totals = payload?.totals || aggregateSnapshots(devices, Date.now()).totals;
+  state.devices = devices;
+  state.aggregate = {
+    ...(payload || {}),
+    devices,
+    totals,
+    errors: Array.isArray(payload?.errors) ? payload.errors : [],
+    fetchedAt: Number(payload?.fetchedAt) || Date.now(),
+  };
+  state.multi = state.demo ? state.demoCount > 1 : isLiveMulti() || devices.length > 1;
+  state.lastGood = state.aggregate;
   state.lastGoodAt = Date.now();
   state.lastError = null;
   state.lastErrorCode = "";
   state.loading = false;
   state.backoff = 0;
 
-  if (state.store) state.store.add(snapshot);
+  for (const device of devices) storeForDevice(device).add(device);
 
-  const status = deriveStatus();
-  updateStatus(status);
+  if (!state.demo && getDevices().length === 0 && devices.length > 0) {
+    for (const device of devices) {
+      upsertDevice({
+        host: device.host || hostForRequests(),
+        name: device.device?.name || "",
+        psn: device.device?.psn || "",
+        modelLabel: device.device?.modelLabel || "",
+        lastSeen: Date.now(),
+      });
+    }
+    state.settings = effectiveSettings();
+    state.discovery.active = false;
+  }
+
+  if (!state.historySeeded) {
+    state.historySeeded = true;
+    seedHistory();
+  }
+
+  updateStatus(deriveStatus());
   renderAll();
   announce();
 }
 
+async function fetchData() {
+  if (state.demo) return demoMulti(state.demoCount);
+  if (isLiveMulti()) {
+    return getMulti({
+      hosts: (state.settings.multiHosts || []).slice(0, MAX_DEVICES),
+      mode: modeForRequests(),
+    });
+  }
+  const snapshot = await getSnapshot({ host: hostForRequests() || undefined, mode: modeForRequests() });
+  return aggregateSnapshots([snapshot], Number(snapshot?.fetchedAt) || Date.now());
+}
+
+function seedHistory() {
+  const myGen = state.gen;
+  if (state.demo) {
+    const history = demoMultiHistoryFor(Date.now(), state.demoCount, 720);
+    for (const entry of history.devices || []) {
+      storeForHost(`demo-${Number(entry.index) + 1}.local`).merge(entry.history);
+    }
+    refreshChart();
+    renderPorts();
+    updateDetail();
+    return;
+  }
+
+  if (isLiveMulti()) {
+    getMultiHistory({ hosts: (state.settings.multiHosts || []).slice(0, MAX_DEVICES), limit: 180 })
+      .then((history) => {
+        if (myGen !== state.gen) return;
+        for (const entry of history.devices || []) {
+          const device = state.devices.find((item) => Number(item.index) === Number(entry.index));
+          const key = device ? deviceKey(device) : entry.host;
+          storeForHost(key).merge(entry.history);
+        }
+        refreshChart();
+        renderPorts();
+        updateDetail();
+      })
+      .catch(() => {
+        /* history is best effort */
+      });
+    return;
+  }
+
+  getHistory({ host: hostForRequests() || undefined, limit: 180 })
+    .then((history) => {
+      if (myGen !== state.gen) return;
+      const device = primaryDevice();
+      storeForHost(device ? deviceKey(device) : hostForRequests() || "default").merge(history);
+      refreshChart();
+      renderPorts();
+      updateDetail();
+    })
+    .catch(() => {
+      /* history is best effort */
+    });
+}
+
 function renderAll() {
-  const snapshot = state.snapshot;
   updateStatus(deriveStatus());
-  renderHeader(snapshot);
-  renderHero(snapshot);
-  renderPorts(snapshot);
-  renderDiagram(snapshot);
-  renderSystem(snapshot);
+  renderHeader();
+  renderHero();
+  renderDiscovery();
+  renderPorts();
+  renderFlow();
+  renderSystem();
   renderBanners();
   refreshChart();
   updateDetail();
-  updateFooter(snapshot);
+  updateFooter();
   updateStaticTranslations();
-  dom.setupCard.hidden = !shouldShowSetup();
 }
 
-function updateFooter(snapshot) {
-  if (!snapshot) {
+function updateFooter() {
+  if (!state.aggregate) {
     dom.footStatus.textContent = "—";
     return;
   }
-  const source = state.demo ? t("footerDemo") : sourceLabel(snapshot.source);
-  dom.footStatus.textContent = `${source} · ${t("updatedAt", { time: fmtClock(snapshot.fetchedAt) })}`;
+  const source = state.demo ? t("footerDemo") : sourceLabel(state.aggregate.source || primaryDevice()?.source);
+  const devicesPart = state.multi ? `${t("multiBadge", { n: state.devices.length })} · ` : "";
+  dom.footStatus.textContent = `${devicesPart}${source} · ${t("updatedAt", {
+    time: fmtClock(state.aggregate.fetchedAt),
+  })}`;
 }
 
 function announce() {
   const now = Date.now();
   if (now - state.lastAnnounceAt < 5000) return;
   state.lastAnnounceAt = now;
-  const snapshot = state.snapshot;
-  if (!snapshot) return;
+  if (!state.aggregate) return;
+  const totals = aggregateTotals();
   dom.liveRegion.textContent = t("liveAnnounce", {
-    power: Number.isFinite(Number(snapshot.totals?.powerW)) ? fmtWatts(Number(snapshot.totals.powerW)) : "—",
-    charging: Number(snapshot.totals?.chargingCount) || 0,
+    power: Number.isFinite(Number(totals?.powerW)) ? fmtWatts(Number(totals.powerW)) : "—",
+    charging: Number(totals?.chargingCount) || 0,
   });
 }
 
@@ -1433,9 +2444,13 @@ function handlePollError(error) {
   state.lastError = error;
   state.lastErrorCode = error?.code || "";
   if (!state.lastGood) state.loading = false;
+  const code = String(state.lastErrorCode || "").toUpperCase();
+  if (!state.demo && getDevices().length === 0 && ["NO_DEVICE", "NO_DEVICES", "ALL_DEVICES_FAILED"].includes(code)) {
+    activateDiscovery(true);
+  }
   updateStatus(deriveStatus());
   renderBanners();
-  dom.setupCard.hidden = !shouldShowSetup();
+  renderDiscovery();
   dom.refreshBtn.classList.remove("is-spinning");
 }
 
@@ -1449,14 +2464,9 @@ async function poll() {
   state.refreshQueued = false;
   const myGen = state.gen;
   try {
-    const snapshot = state.demo
-      ? demo()
-      : await getSnapshot({ host: hostForRequests() || undefined, mode: modeForRequests() });
+    const payload = await fetchData();
     if (myGen !== state.gen) return;
-    state.lastError = null;
-    state.lastErrorCode = "";
-    state.backoff = 0;
-    applySnapshot(snapshot);
+    applyAggregate(payload);
     dom.refreshBtn.classList.remove("is-spinning");
     scheduleNext(currentInterval());
   } catch (error) {
@@ -1491,49 +2501,40 @@ function refreshNow() {
   poll();
 }
 
-function seedDemoHistory() {
-  try {
-    state.store.merge(demoHistoryFor(Date.now(), 720));
-  } catch {
-    /* demo history is best-effort */
-  }
-  state.historySeeded = true;
-  refreshChart();
-}
-
-function applyDemo() {
-  seedDemoHistory();
-  applySnapshot(demo());
-}
-
-async function seedLiveHistory() {
-  const myGen = state.gen;
-  try {
-    const history = await getHistory({ host: hostForRequests() || undefined, limit: 180 });
-    if (myGen !== state.gen) return;
-    state.store.merge(history);
-    state.historySeeded = true;
-    refreshChart();
-    renderPorts(state.snapshot);
-    updateDetail();
-  } catch {
-    if (myGen === state.gen) state.historySeeded = true;
-  }
-}
-
-function restartSessionData() {
+function restartPolling() {
   state.gen += 1;
   window.clearTimeout(state.timer);
   state.timer = 0;
-  state.snapshot = null;
+  state.backoff = 0;
+  state.polling = false;
+  state.refreshQueued = false;
+  if (!document.hidden) poll();
+}
+
+function reinitializeData() {
+  state.gen += 1;
+  window.clearTimeout(state.timer);
+  state.timer = 0;
+  state.polling = false;
+  state.refreshQueued = false;
+  state.backoff = 0;
+  state.aggregate = null;
+  state.devices = [];
   state.lastGood = null;
   state.lastGoodAt = 0;
+  state.lastError = null;
+  state.lastErrorCode = "";
   state.loading = true;
-  state.chartHasData = false;
-  state.store = newHistoryStore();
   state.historySeeded = false;
-  if (state.demo) seedDemoHistory();
-  else seedLiveHistory();
+  state.stores = new Map();
+  state.selectedPort = null;
+  state.legendSignature = "";
+  state.portSignature = "";
+  if (state.detailOpen) closeDetail();
+  destroyDiagrams();
+  renderAll();
+  if (state.demo) applyAggregate(demoMulti(state.demoCount));
+  else poll();
 }
 
 /* ------------------------------------------------------------------ */
@@ -1543,9 +2544,55 @@ function restartSessionData() {
 function updateStaticTranslations() {
   dom.langLabel.textContent = getLang() === "zh" ? "EN" : "中";
   dom.langBtn.setAttribute("aria-label", t("switchLang"));
-  dom.setupDemoLink.href = urlWithDemo();
-  const host = hostForRequests();
+  dom.setupDemoLink.href = urlWithDemo(1);
+  dom.setupDemoTwoLink.href = urlWithDemo(2);
+  dom.demoOneLink.href = urlWithDemo(1);
+  dom.demoTwoLink.href = urlWithDemo(2);
+  const host = hostForRequests() || savedDevices()[0]?.host || "";
   dom.setupCmd.textContent = `node server.mjs${host ? ` --host ${host}` : " --host cp02-xxxx.local"}`;
+  updateDeviceSwitch();
+}
+
+/* ------------------------------------------------------------------ */
+/* Device dialog interactions                                         */
+/* ------------------------------------------------------------------ */
+
+function bindDeviceDialogEvents() {
+  dom.deviceSwitch.addEventListener("click", openDeviceDialog);
+  dom.deviceDialogClose.addEventListener("click", closeDeviceDialog);
+  dom.deviceDialogDone.addEventListener("click", closeDeviceDialog);
+  dom.deviceDialog.addEventListener("click", (event) => {
+    if (event.target === dom.deviceDialog) closeDeviceDialog();
+  });
+  dom.deviceModeTabs.addEventListener("click", (event) => {
+    const button = event.target.closest(".seg-btn");
+    if (!button) return;
+    if (button.dataset.mode === "multi" && !state.demo && savedDevices().length < 2) {
+      renderDeviceDialog();
+      return;
+    }
+    state.deviceDialogMode = button.dataset.mode;
+    if (state.deviceDialogMode === "multi") {
+      const current = state.settings.multiHosts || [];
+      state.multiDraft = new Set(current.length > 1 ? current : savedDevices().slice(0, MAX_DEVICES).map((item) => item.host));
+    }
+    renderDeviceDialog();
+  });
+  dom.deviceApplyMulti.addEventListener("click", () => {
+    const hosts = [...state.multiDraft].filter((host) => savedDevices().some((item) => item.host === host));
+    setMultiSelection({ enabled: true, hosts });
+    state.settings = effectiveSettings();
+    closeDeviceDialog();
+    reinitializeData();
+  });
+  dom.deviceScanBtn.addEventListener("click", startDeviceScan);
+  dom.deviceManualAdd.addEventListener("click", () => addManualDevice(dom.deviceManualHost, { use: savedDevices().length === 0 }));
+  dom.deviceManualHost.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addManualDevice(dom.deviceManualHost, { use: savedDevices().length === 0 });
+    }
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -1558,7 +2605,8 @@ function bindEvents() {
     saveSettings({ theme: next });
     state.settings = effectiveSettings();
     applyTheme(next);
-    buildLegend(true);
+    state.legendSignature = "";
+    renderFlow();
     refreshChart();
   });
 
@@ -1572,6 +2620,10 @@ function bindEvents() {
   dom.refreshBtn.addEventListener("click", refreshNow);
   dom.settingsForm.addEventListener("submit", handleSave);
   dom.resetBtn.addEventListener("click", handleReset);
+  dom.manageDevicesBtn.addEventListener("click", () => {
+    closeSettings();
+    openDeviceDialog();
+  });
   dom.testBtn.addEventListener("click", testConnection);
   dom.scanBtn.addEventListener("click", startScan);
 
@@ -1585,11 +2637,34 @@ function bindEvents() {
     setRange(button.dataset.range);
   });
 
+  dom.viewTabs.addEventListener("click", (event) => {
+    const button = event.target.closest(".seg-btn");
+    if (!button) return;
+    setView(button.dataset.view);
+  });
+  dom.replayBtn.addEventListener("click", replayFlow);
+
+  dom.discoveryScanBtn.addEventListener("click", () => startDiscoveryScan());
+  dom.manualAddBtn.addEventListener("click", () => {
+    const host = dom.manualHost.value.trim();
+    if (!host) return;
+    addDeviceEntry({ host }, { use: savedDevices().length === 0 });
+    dom.manualHost.value = "";
+  });
+  dom.manualHost.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      dom.manualAddBtn.click();
+    }
+  });
+
+  bindDeviceDialogEvents();
+
   dom.detailClose.addEventListener("click", closeDetail);
   dom.detailLayer.addEventListener("keydown", onSheetKeydown);
 
   dom.sysDetails.addEventListener("toggle", () => {
-    if (dom.sysDetails.open) renderSystem(state.snapshot);
+    if (dom.sysDetails.open) renderSystem();
   });
 
   document.addEventListener("click", (event) => {
@@ -1598,6 +2673,7 @@ function bindEvents() {
     const action = target.dataset.action;
     if (action === "retry") refreshNow();
     else if (action === "settings" || action === "open-settings") openSettings();
+    else if (action === "devices") openDeviceDialog();
     else if (action === "scan") {
       openSettings();
       startScan();
@@ -1626,7 +2702,8 @@ function bindEvents() {
   state.themeQuery?.addEventListener?.("change", () => {
     if (effectiveSettings().theme !== "auto") return;
     applyTheme("auto");
-    buildLegend(true);
+    state.legendSignature = "";
+    renderFlow();
     refreshChart();
   });
 
@@ -1640,7 +2717,10 @@ function boot() {
   cacheDom();
   state.settings = effectiveSettings();
   state.demo = state.settings.demo;
+  state.demoCount = state.settings.demoDevices || 1;
+  state.multi = state.demo ? state.demoCount > 1 : isLiveMulti();
   state.range = RANGES[state.settings.window] ? state.settings.window : "30m";
+  state.view = state.settings.view === "simple" ? "simple" : "pro";
 
   setLang(state.settings.lang);
   applyTheme(state.settings.theme);
@@ -1654,20 +2734,32 @@ function boot() {
     formatTime: (ts) => fmtClock(ts),
     formatPower: (watts) => fmtWatts(watts),
   });
-  buildDiagram();
-  ensurePortCards();
-  state.store = newHistoryStore();
-  buildLegend(true);
-
+  buildLegend();
   renderAll();
   updateStatus("loading");
 
   state.staleTimer = window.setInterval(updateStaleIfNeeded, 2500);
 
   if (state.demo) {
-    applyDemo();
+    applyAggregate(demoMulti(state.demoCount));
+    return;
+  }
+
+  const hasTarget = Boolean(hostForRequests() || savedDevices().length);
+  if (!hasTarget) {
+    probeProxy()
+      .then((health) => {
+        if (health?.defaultHost) {
+          poll();
+        } else {
+          activateDiscovery(true);
+          poll();
+        }
+      })
+      .catch(() => {
+        activateDiscovery(false);
+      });
   } else {
-    seedLiveHistory();
     poll();
   }
 }

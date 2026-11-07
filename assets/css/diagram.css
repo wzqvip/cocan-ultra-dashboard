@@ -217,6 +217,10 @@
   opacity: 0.08;
 }
 
+.diagram.replay-restart .cable-dash {
+  animation: none !important;
+}
+
 @keyframes pd-flow {
   to {
     stroke-dashoffset: -14;

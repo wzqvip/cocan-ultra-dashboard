@@ -223,6 +223,143 @@ async function buildSnapshot(rawHost, mode = "auto") {
 }
 
 /* ------------------------------------------------------------------ */
+/* Multi-device                                                       */
+/* ------------------------------------------------------------------ */
+
+function enrichSnapshot(snapshot, index) {
+  return {
+    ...snapshot,
+    index,
+    device: { ...(snapshot.device || {}), slot: index + 1 },
+    ports: (snapshot.ports || []).map((port) => ({
+      ...port,
+      deviceIndex: index,
+      globalId: index * 5 + Number(port.id),
+    })),
+  };
+}
+
+async function mapLimit(items, limit, mapper) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => worker()),
+  );
+  return results;
+}
+
+function sumTotals(devices) {
+  const powerW = devices.reduce((sum, d) => sum + (Number(d.totals?.powerW) || 0), 0);
+  const budgetW = devices.reduce((sum, d) => sum + (Number(d.totals?.budgetW) || 0), 0);
+  const sessionValues = devices
+    .map((d) => d.totals?.sessionWh)
+    .filter((value) => Number.isFinite(value));
+  return {
+    powerW: Math.round(powerW * 100) / 100,
+    budgetW,
+    utilization: budgetW > 0 ? Math.round((powerW / budgetW) * 1000) / 10 : null,
+    attachedCount: devices.reduce((sum, d) => sum + (d.totals?.attachedCount || 0), 0),
+    chargingCount: devices.reduce((sum, d) => sum + (d.totals?.chargingCount || 0), 0),
+    sessionWh: sessionValues.length
+      ? Math.round(sessionValues.reduce((a, b) => a + b, 0) * 1000) / 1000
+      : null,
+    deviceCount: devices.length,
+    portCount: devices.reduce((sum, d) => sum + (d.ports?.length || 5), 0),
+    onlineCount: devices.length,
+  };
+}
+
+async function buildMulti(hostList, mode = "auto") {
+  const hosts = [...new Set((hostList || []).map((h) => String(h || "").trim()).filter(Boolean))];
+  if (!hosts.length) throw new ApiError("NO_DEVICES", "没有选择设备", 400);
+  if (hosts.length > 8) throw new ApiError("TOO_MANY_DEVICES", "最多同时监看 8 台设备", 400);
+  if (!["auto", "json", "prometheus"].includes(mode)) mode = "auto";
+  const t0 = Date.now();
+  const results = await mapLimit(hosts, 3, async (host) => {
+    try {
+      return { ok: true, snapshot: await buildSnapshot(host, mode) };
+    } catch (error) {
+      return { ok: false, host, error };
+    }
+  });
+  const devices = [];
+  const errors = [];
+  results.forEach((result, index) => {
+    if (result.ok) devices.push(enrichSnapshot(result.snapshot, index));
+    else {
+      errors.push({
+        host: result.host,
+        error: result.error?.code || "DEVICE_ERROR",
+        message: result.error?.message || "读取设备失败",
+      });
+    }
+  });
+  if (!devices.length) {
+    throw new ApiError(
+      "ALL_DEVICES_FAILED",
+      errors.map((e) => `${e.host}: ${e.message}`).join("；") || "所有设备均不可达",
+      502,
+    );
+  }
+  return {
+    ok: true,
+    source: devices[0].source,
+    fetchedAt: Date.now(),
+    count: devices.length,
+    devices,
+    totals: sumTotals(devices),
+    errors,
+    latencyMs: Date.now() - t0,
+  };
+}
+
+async function buildMultiHistory(hostList, limit) {
+  const hosts = [...new Set((hostList || []).map((h) => String(h || "").trim()).filter(Boolean))];
+  if (!hosts.length) throw new ApiError("NO_DEVICES", "没有选择设备", 400);
+  if (hosts.length > 8) throw new ApiError("TOO_MANY_DEVICES", "最多同时监看 8 台设备", 400);
+  const now = Date.now();
+  const results = await mapLimit(hosts, 3, async (host) => {
+    try {
+      const target = resolveTarget(host);
+      const res = await fetchText(`${target.base}/porthistoryz?limit=${limit}`, 6000);
+      if (!res.ok) throw new ApiError("DEVICE_HTTP", `历史接口返回 ${res.status}`, 502);
+      const payload = JSON.parse(res.text);
+      return {
+        ok: true,
+        host: target.host,
+        history: normalizeHistory(payload, { host: target.host, now }),
+      };
+    } catch (error) {
+      return { ok: false, host, error };
+    }
+  });
+  const devices = [];
+  const errors = [];
+  results.forEach((result, index) => {
+    if (result.ok) {
+      devices.push({ host: result.host, index, history: result.history });
+    } else {
+      errors.push({
+        host: result.host,
+        error: result.error?.code || "DEVICE_ERROR",
+        message: result.error?.message || "读取历史失败",
+      });
+    }
+  });
+  if (!devices.length) {
+    throw new ApiError("ALL_DEVICES_FAILED", errors.map((e) => `${e.host}: ${e.message}`).join("；"), 502);
+  }
+  return { ok: true, source: "multi-history", fetchedAt: now, devices, errors };
+}
+
+/* ------------------------------------------------------------------ */
 /* LAN scan                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -435,6 +572,22 @@ async function handleApi(req, res, url) {
     const mode = url.searchParams.get("mode") || "auto";
     const snapshot = await buildSnapshot(hostParam, mode);
     sendJson(res, 200, snapshot);
+    return;
+  }
+
+  if (route === "/api/multi") {
+    const mode = url.searchParams.get("mode") || "auto";
+    const hosts = (url.searchParams.get("hosts") || "").split(",");
+    const result = await buildMulti(hosts, mode);
+    sendJson(res, 200, result);
+    return;
+  }
+
+  if (route === "/api/multi-history") {
+    const hosts = (url.searchParams.get("hosts") || "").split(",");
+    const limit = Math.max(2, Math.min(Number(url.searchParams.get("limit")) || 180, 720));
+    const result = await buildMultiHistory(hosts, limit);
+    sendJson(res, 200, result);
     return;
   }
 

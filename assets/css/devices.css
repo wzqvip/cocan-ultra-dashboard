@@ -1,0 +1,743 @@
+/* ==========================================================================
+   Multi-device UI: device switcher, discovery, device dialog, simple view,
+   per-device diagrams and grouped port cards.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Topbar device switcher
+   -------------------------------------------------------------------------- */
+
+.device-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  max-width: 100%;
+  min-height: 20px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.device-switch:hover {
+  background: var(--surface-3);
+  border-color: var(--line-2);
+  color: var(--text-2);
+}
+
+.device-switch .ds-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device-switch .ds-chevron {
+  flex: none;
+  opacity: 0.7;
+}
+
+.device-switch[data-multi="true"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+  background: var(--accent-soft);
+}
+
+/* --------------------------------------------------------------------------
+   Hero meta line
+   -------------------------------------------------------------------------- */
+
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+.hero-meta b {
+  font-weight: 700;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-meta .meta-sep {
+  opacity: 0.55;
+}
+
+/* --------------------------------------------------------------------------
+   Flow card tools / simple view
+   -------------------------------------------------------------------------- */
+
+.flow-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.btn-sm {
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.flow-content {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.diagram-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  gap: 10px;
+  align-items: start;
+  width: 100%;
+}
+
+.diagram-grid.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.device-diagram {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.diagram-grid.is-single .device-diagram {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.device-diagram-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+.device-diagram-head .dd-label {
+  font-weight: 700;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.device-diagram-head .dd-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 46%;
+}
+
+.device-diagram-head .dd-total {
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.diagram-grid.is-single .device-diagram-head {
+  display: none;
+}
+
+.device-diagram .diagram-wrap {
+  margin: 0;
+  overflow: visible;
+}
+
+.simple-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.simple-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.simple-summary .simple-cap {
+  font-size: 20px;
+  font-weight: 720;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.simple-summary .simple-charging {
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.simple-group {
+  padding: 10px 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.simple-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.simple-group-head .sg-label {
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.simple-group-head .sg-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.simple-group-head .sg-total {
+  margin-left: auto;
+  font-weight: 650;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.simple-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.simple-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 96px;
+  gap: 8px;
+  align-items: center;
+}
+
+.simple-port {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.simple-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pc, var(--accent));
+  flex: none;
+}
+
+.simple-track-wrap {
+  min-width: 0;
+  height: 14px;
+  display: flex;
+  align-items: center;
+}
+
+.simple-track {
+  position: relative;
+  height: 10px;
+  max-width: 100%;
+  min-width: 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--pc, var(--accent)) 34%, var(--line));
+  background: color-mix(in srgb, var(--pc, var(--accent)) 8%, var(--surface-2));
+  overflow: hidden;
+}
+
+.simple-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  min-width: 0;
+  border-radius: inherit;
+  background: var(--pc, var(--accent));
+  opacity: 0.88;
+  transition: width 0.4s cubic-bezier(0.22, 0.8, 0.24, 1);
+}
+
+.simple-val {
+  text-align: right;
+  font-size: 10.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.simple-val b {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.simple-proto {
+  display: inline-block;
+  margin-left: 3px;
+  padding: 0 4px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  font-size: 9px;
+  color: var(--text-3);
+  max-width: 54px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: 1px;
+}
+
+/* --------------------------------------------------------------------------
+   Grouped port cards
+   -------------------------------------------------------------------------- */
+
+.port-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.device-group {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.device-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.device-group-index {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-weight: 700;
+}
+
+.device-group-name {
+  min-width: 0;
+  max-width: 52%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+}
+
+.device-group-total {
+  margin-left: auto;
+  font-weight: 650;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pc-global {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1.6;
+}
+
+/* --------------------------------------------------------------------------
+   Discovery card (first run)
+   -------------------------------------------------------------------------- */
+
+.discovery-card {
+  margin-top: 12px;
+}
+
+.discovery-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.discovery-head .setup-text {
+  margin-top: 2px;
+}
+
+.discovery-card .scan-status {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.discovery-card .scan-status:empty {
+  display: none;
+}
+
+.discovery-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.discovery-list:empty {
+  display: none;
+}
+
+.discovery-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  min-width: 0;
+}
+
+.discovery-item-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.discovery-name {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discovery-meta {
+  font-size: 10.5px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+
+.discovery-item .btn {
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+}
+
+.discovery-manual {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.discovery-manual > label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.manual-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.manual-row input {
+  flex: 1;
+  min-width: 0;
+  min-height: 38px;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.manual-row input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.manual-row .btn {
+  min-height: 38px;
+}
+
+.discovery-card .setup-actions {
+  margin-top: 12px;
+}
+
+/* --------------------------------------------------------------------------
+   Device dialog
+   -------------------------------------------------------------------------- */
+
+.device-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: inherit;
+}
+
+.device-mode-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.mode-hint {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.dlg-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dlg-section-title {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--text-2);
+}
+
+.device-count {
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.device-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+
+.device-row.is-active {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-2));
+}
+
+.device-row input[type="checkbox"] {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.device-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.device-name {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-meta {
+  font-size: 10.5px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+
+.device-row .icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  color: var(--text-3);
+}
+
+.device-row .icon-btn:hover {
+  color: var(--bad);
+}
+
+.device-empty {
+  padding: 10px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+.device-dialog .scan-list {
+  max-height: 190px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+
+.device-dialog .scan-list:empty {
+  display: none;
+}
+
+.device-dialog .scan-item {
+  border-bottom: 1px solid var(--line);
+}
+
+.device-dialog .dialog-note {
+  margin-top: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 559px) {
+  .device-diagram {
+    padding: 8px 8px 4px;
+  }
+
+  .simple-row {
+    grid-template-columns: 38px minmax(0, 1fr) 88px;
+    gap: 6px;
+  }
+
+  .simple-proto {
+    display: none;
+  }
+
+  .device-group-name {
+    max-width: 46%;
+  }
+
+  .flow-tools {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .view-seg .seg-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+}
+
+@media (min-width: 560px) {
+  .diagram-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .diagram-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  }
+
+  .diagram-grid.is-single {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Landscape phones: keep everything compact. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .hero-meta {
+    margin-top: 5px;
+    font-size: 10.5px;
+  }
+
+  .flow-tools {
+    gap: 4px;
+  }
+
+  .btn-sm {
+    min-height: 26px;
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
+  .diagram-grid {
+    gap: 8px;
+  }
+
+  .device-diagram {
+    padding: 6px 8px 2px;
+  }
+
+  .simple-rows {
+    gap: 5px;
+    margin-top: 6px;
+  }
+
+  .simple-row {
+    grid-template-columns: 34px minmax(0, 1fr) 80px;
+  }
+
+  .simple-track-wrap {
+    height: 12px;
+  }
+
+  .simple-track {
+    height: 8px;
+  }
+}

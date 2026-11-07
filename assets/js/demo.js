@@ -137,11 +137,26 @@ function demoPort(id, spec, now, phaseElapsed) {
   };
 }
 
-export function demoSnapshot(now = Date.now()) {
-  const { phase, phaseElapsed } = phaseAt(now);
+function demoDevice(index) {
+  const n = index + 1;
+  return {
+    ...DEMO_DEVICE,
+    psn: `CP02-DEMO-000${n}`,
+    name: `CP02-DEMO-0${n}`,
+    mdnsHostname: `cp02-demo${n}.local`,
+    bleMac: `02:00:00:00:0${n}:23`,
+    wifiMac: `02:00:00:00:0${n}:22`,
+    portMaxW: DEMO_DEVICE.portMaxW.slice(),
+  };
+}
+
+export function demoSnapshot(now = Date.now(), options = {}) {
+  const index = Math.max(0, Number(options.index) || 0);
+  const shifted = now - index * 13000;
+  const { phase, phaseElapsed } = phaseAt(shifted);
   const ports = [];
   for (let id = 0; id <= 4; id += 1) {
-    ports.push(demoPort(id, phase.ports[id], now, phaseElapsed));
+    ports.push(demoPort(id, phase.ports[id], shifted, phaseElapsed));
   }
   const powerW = round(
     ports.reduce((sum, p) => sum + p.powerW, 0),
@@ -152,16 +167,16 @@ export function demoSnapshot(now = Date.now()) {
     ports.reduce((sum, p) => sum + (p.sessionWh || 0), 0),
     3,
   );
-  const uptimeSeconds = 3 * 86400 + 4 * 3600 + 12 * 60 + 37;
+  const uptimeSeconds = 3 * 86400 + 4 * 3600 + 12 * 60 + 37 + index * 1907;
   return {
     ok: true,
     source: "demo",
-    host: "demo.local",
+    host: `demo-${index + 1}.local`,
     fetchedAt: now,
     latencyMs: 0,
     mode: "demo",
     warnings: ["演示数据 · 不对应真实设备"],
-    device: { ...DEMO_DEVICE, portMaxW: DEMO_DEVICE.portMaxW.slice() },
+    device: demoDevice(index),
     system: {
       chip: "esp32c3",
       cores: 1,
@@ -172,14 +187,14 @@ export function demoSnapshot(now = Date.now()) {
       bootTimeSeconds: uptimeSeconds,
       resetReason: 3,
       resetReasonLabel: "软件复位",
-      freeHeap: Math.round(41000 + 900 * Math.sin(now / 7000)),
+      freeHeap: Math.round(41000 + 900 * Math.sin(now / 7000 + index)),
       tasks: null,
     },
     wifi: {
-      ssid: "DEMO-2.4G",
-      bssid: "02:00:00:00:00:03",
-      channel: 6,
-      rssi: Math.round(-47 + 2 * Math.sin(now / 9000)),
+      ssid: `DEMO-2.4G-${index + 1}`,
+      bssid: `02:00:00:00:0${index + 1}:03`,
+      channel: index === 0 ? 6 : 11,
+      rssi: Math.round(-47 - index * 4 + 2 * Math.sin(now / 9000)),
     },
     ports,
     totals: {
@@ -189,7 +204,7 @@ export function demoSnapshot(now = Date.now()) {
       sessionWh,
       budgetW: 160,
       utilization: round((powerW / 160) * 100, 1),
-      inputVoltageV: round(29.8 + 0.05 * Math.sin(now / 4000), 2),
+      inputVoltageV: round(29.8 + 0.05 * Math.sin(now / 4000 + index), 2),
     },
     capabilities: {
       energy: true,
@@ -201,7 +216,13 @@ export function demoSnapshot(now = Date.now()) {
   };
 }
 
-export function demoHistory(now = Date.now(), limit = 180) {
+export function demoSnapshots(now = Date.now(), count = 1) {
+  const n = Math.max(1, Math.min(Number(count) || 1, 6));
+  return Array.from({ length: n }, (_, index) => demoSnapshot(now, { index }));
+}
+
+export function demoHistory(now = Date.now(), limit = 180, options = {}) {
+  const index = Math.max(0, Number(options.index) || 0);
   const count = Math.max(2, Math.min(Number(limit) || 180, 720));
   const period = 10000;
   const ports = [0, 1, 2, 3, 4].map((id) => ({
@@ -212,7 +233,7 @@ export function demoHistory(now = Date.now(), limit = 180) {
   }));
   for (let i = count - 1; i >= 0; i -= 1) {
     const t = now - i * period;
-    const snap = demoSnapshot(t);
+    const snap = demoSnapshot(t, { index });
     for (const port of snap.ports) {
       const target = ports[port.id];
       if (!target) continue;
@@ -227,7 +248,7 @@ export function demoHistory(now = Date.now(), limit = 180) {
   return {
     ok: true,
     source: "demo",
-    host: "demo.local",
+    host: `demo-${index + 1}.local`,
     fetchedAt: now,
     samplePeriodMs: period,
     endTs: now,

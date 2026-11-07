@@ -2,9 +2,12 @@
 
 > 一个**只读、零依赖**的局域网 Web 仪表盘，把 CANDYSIGN 制糖工厂 AI 小电拼（CP-02 / Pro / Ultra，160 W 4C1A）的
 > 五口实时功率、电压、电流、协议、充电时长与累计电量，画成 App 同款的功率分布图。
+> 支持扫描/选择设备、多台一起看（P0–P4、P5–P9…）、简洁/专业双视图。
 > 不装 App、不登录账号、不需要 MCP token，也不会修改充电器的任何设置。
+>
+> **许可证：PolyForm Noncommercial 1.0.0 — 禁止商用**（非 OSI 开源，source-available）。
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-111.svg)](LICENSE)
+[![License: NonCommercial](https://img.shields.io/badge/License-NonCommercial-ff4719.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/Node.js-18%2B-3c873a.svg)](https://nodejs.org)
 [![No dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](#)
 [![Live demo](https://img.shields.io/badge/demo-GitHub%20Pages-ff4719.svg)](https://wzqvip.github.io/cocan-ultra-dashboard/)
@@ -13,11 +16,11 @@
   <img src="docs/screenshots/desktop.png" alt="桌面端：功率分布图 + 总功率 + 端口与曲线" width="900">
 </p>
 
-| 竖屏手机 | 横屏手机 |
+| 竖屏（2 台演示） | 横屏（2 台演示） |
 | --- | --- |
-| <img src="docs/screenshots/portrait.png" alt="竖屏布局" width="280"> | <img src="docs/screenshots/landscape.png" alt="横屏布局" width="560"> |
+| <img src="docs/screenshots/portrait.png" alt="竖屏双设备布局" width="280"> | <img src="docs/screenshots/landscape.png" alt="横屏双设备布局" width="560"> |
 
-> 截图使用**演示数据**（`?demo=1`），不包含真实设备的 PSN / MAC / SSID / IP。
+> 截图使用**演示数据**（`?demo=2`），不包含真实设备的 PSN / MAC / SSID / IP。
 
 ---
 
@@ -43,19 +46,24 @@
 
 ## 功能
 
-- **App 同款功率分布图**：A、C1–C4 五个端口 chip，贝塞尔线连到机身；充电中的线有流动虚线，
-  机身上显示总功率，右下角是标称 160 W 预算与使用率。
+- **官方 App 双视图**：**专业视图**是 A、C1–C4 五个端口 chip 经贝塞尔线连到机身的功率流图
+  （充电中的线有流动虚线，可“重播功率流”）；**简洁视图**是五条端口色功率线，
+  实心长度=当前输出、浅色轨道=端口能力（A 60 W、C 140 W），对齐官方 App 的 `160W / 5` 表达。
 - **实时总览**：总功率、在充口数、本次累计电量、DC 输入母线电压、开机时长。
 - **五口明细**：实时 W / V / A、快充协议（PD / PPS / QC / UFCS / VOOC…）、端口状态、
   本次充电时长、本次电量（由设备原始计数换算，±5% 估算）。
-- **曲线**：设备自带 30 分钟历史 + 浏览器本地累积最长 2 小时（10 秒/点，仅页面打开期间）。
+- **扫描并选择设备**：首次打开自动扫描本机 /24 网段，列出发现的小电拼（名称 / PSN / 主机 / RSSI），
+  点选即可监看；也支持手动输入 IP、mDNS 主机名和保存多台设备。
+- **多台一起看**：单台/多台模式切换；2 台设备按 **P0–P4、P5–P9** 编号，N 台依此类推；
+  总功率按所有在线设备求和，支持单台掉线时的部分展示。
+- **曲线**：设备自带 30 分钟历史 + 浏览器本地累积最长 2 小时（10 秒/点，仅页面打开期间）；
+  多台模式显示各台总功率与合计。
 - **响应式 / 横竖屏**：竖屏手机、横屏手机、平板、桌面四档布局；支持刘海安全区、
   `100dvh`、无横向滚动；手机横屏时自动切成左右两栏。
 - **主题与语言**：浅色 / 深色（跟随系统或手动切换）；中文 / English。
-- **设备发现**：扫描本机所在 /24 网段，自动找出小电拼并填入地址；也支持 mDNS 主机名。
 - **数据源可切换**：自动 / `metrics.json` / Prometheus `/metrics`；Prometheus 模式会明确标注
   「不提供充电时长与累计电量」。
-- **演示模式**：`?demo=1` 或 GitHub Pages 自动使用合成数据，适合截图和 UI 开发。
+- **演示模式**：`?demo=1` 演示一台、`?demo=2` 演示两台（P0–P9）；GitHub Pages 自动演示。
 - **无构建、无 npm 依赖、无 CDN**：原生 HTML/CSS/ES Modules，直接跑。
 
 ## 快速开始
@@ -76,8 +84,9 @@ node server.mjs --host cp02-<PSN>.local
 Windows 也可以双击 `start.bat`（可带参数：`start.bat --host 192.168.1.20`）。
 macOS / Linux 用 `./start.sh`。
 
-**不知道设备地址？** 启动后打开页面 → 右上角设置 → 扫描局域网，或直接输入 IP。
-不传 `--host` 时，页面会提示先配置设备。
+**不知道设备地址？** 直接 `node server.mjs` 启动，打开页面后会自动扫描局域网；
+在“设备”弹窗里选择发现的小电拼即可。也可以手动输入 IP、mDNS 主机名，或一次勾选多台
+进入 **多台监看**（2 台就是 P0–P9，N 台依此类推）。
 
 > `.local` 主机名依赖 mDNS。部分 Windows 机器没装 Bonjour，解析不了 `.local`，
 > 这时用路由器后台看到的 IP 即可；扫描功能也会直接返回 IP。
@@ -130,6 +139,8 @@ node server.mjs --host cp02-<PSN>.local --lan
 | `GET /api/history?host=&limit=180` | 归一化后的历史曲线 |
 | `GET /api/info?host=` | 设备身份与能力 |
 | `GET /api/scan` | 扫描本机 /24 网段 |
+| `GET /api/multi?hosts=a,b&mode=` | 多台聚合快照（P0–P(5N-1)） |
+| `GET /api/multi-history?hosts=a,b&limit=180` | 多台历史 |
 | `GET /api/health` | 服务状态 |
 
 完整字段、单位与协议枚举见 [docs/DATA-CONTRACT.md](docs/DATA-CONTRACT.md)。
@@ -181,13 +192,36 @@ ionbridge_uptime_seconds
 
 ## 界面与交互
 
-- **功率分布图**：点任意端口 chip 选中该口，再点端口列表或曲线即可打开详情。
-- **曲线**：5 分钟 / 30 分钟 / 2 小时切换；图例可单独开关每个端口；鼠标悬停或触摸查看数值。
+- **功率分布图**：点任意端口 chip 选中该口，再点端口列表或曲线即可打开详情；
+  顶部可切换 **简洁视图 / 专业视图**，专业视图支持“重播功率流”。
+- **设备管理**：右上角设备按钮 → 单台/多台切换、扫描、添加、移除；
+  首次打开（无已保存设备）会自动扫描并列出可选项。
+- **多台模式**：每台设备一组端口，全局编号 P0–P(5N-1)；总功率、预算、在充数、本次电量
+  都按在线设备求和；图标/端口详情保留设备归属。
+- **曲线**：5 分钟 / 30 分钟 / 2 小时切换；图例可单独开关每个端口（多台模式为每台总功率
+  与合计）；鼠标悬停或触摸查看数值。
 - **设置**：设备地址、数据源、轮询间隔（默认 3 s）、扫描局域网、主题、语言。
   地址与偏好保存在 `localStorage`，不上传。
-- **状态**：`实时` / `演示` / `离线` / `数据过期`；连续失败会保留最后一次数据并提示重试。
+- **状态**：`实时` / `演示` / `离线` / `数据过期`；连续失败会保留最后一次数据并提示重试；
+  多台模式单台掉线时其余设备继续显示，并提示离线主机。
 - **横竖屏**：竖屏单列、横屏左右两栏、桌面 2–3 栏；旋转屏幕无需刷新。
 - **无障碍**：键盘可操作、可见焦点环、`aria-live` 节流播报、支持 `prefers-reduced-motion`。
+
+## 多台监看
+
+单台模式看一台；在设备弹窗里切换到 **多台**，勾选 2–6 台即可一起看。
+端口全局编号：设备 1 = **P0–P4**，设备 2 = **P5–P9**，N 台依此类推。
+总功率、预算（160 W × 在线台数）、在充数、本次电量都会汇总；某台掉线时其余设备继续显示。
+
+<p align="center">
+  <img src="docs/screenshots/devices.png" alt="设备弹窗：单台/多台、扫描局域网、手动添加" width="300">
+</p>
+
+<p align="center"><sub>设备弹窗：单台 / 多台、扫描局域网、手动添加；模式控制类功能需 MCP，只读看板不伪造。</sub></p>
+
+[查看完整多台截图（390 × 2915）](docs/screenshots/multi.png)
+
+## 端口详情
 
 <p align="center">
   <img src="docs/screenshots/detail.png" alt="端口详情底部抽屉：功率、电压电流、协议、本次电量" width="300">
@@ -206,6 +240,8 @@ GitHub Pages，没有构建步骤。Pages 上的页面会自动进入**演示模
 - 设备本身也不发 CORS 头。
 
 所以想要真实数据，请在本地/局域网跑 `server.mjs`；Pages 只用于展示 UI。
+演示站默认 1 台；点页面里的“演示 2 台”或打开
+<https://wzqvip.github.io/cocan-ultra-dashboard/?demo=2> 可看 P0–P9 的多台布局。
 如需从公网看真机，可自己加一层 HTTPS 反向代理/VPN，本仓库不提供。
 
 ### 本地常驻（可选）
@@ -216,7 +252,7 @@ GitHub Pages，没有构建步骤。Pages 上的页面会自动进入**演示模
 ## 隐私与安全
 
 - 仓库、演示数据和截图里**不包含**真实 PSN、MAC、SSID、BSSID 或设备 IP；示例统一用占位符。
-- 演示数据由 `assets/js/demo.js` 合成，设备地址固定为 `demo.local`。
+- 演示数据由 `assets/js/demo.js` 合成，设备地址为 `demo-1.local` / `demo-2.local`。
 - 代理默认只监听 `127.0.0.1`；`--lan` 需显式开启，且没有鉴权。
 - 代理拒绝访问公网目标（`--allow-any` 可显式放开，不建议）。
 - 不读取、不保存、不要求 MCP token；不调用任何写接口。
@@ -228,20 +264,21 @@ GitHub Pages，没有构建步骤。Pages 上的页面会自动进入**演示模
 .
 ├── index.html                 # 单页仪表盘
 ├── assets/
-│   ├── css/                   # 设计 token、布局、组件、响应式
+│   ├── css/                   # 设计 token、布局、组件、设备弹窗、响应式
 │   └── js/
-│       ├── app.js             # 状态与渲染
-│       ├── data.js            # 代理客户端、HistoryStore、格式化
-│       ├── demo.js            # 合成演示数据
-│       ├── diagram.js         # SVG 功率分布图
+│       ├── app.js             # 状态与渲染（单台/多台、简洁/专业视图）
+│       ├── data.js            # 代理客户端、设备列表、HistoryStore、格式化
+│       ├── demo.js            # 合成演示数据（1–6 台）
+│       ├── diagram.js         # SVG 功率分布图 + 重播功率流
 │       ├── charts.js          # Canvas 曲线
 │       ├── i18n.js            # 中文 / English
 │       └── protocols.js       # 协议枚举与端口配色
-├── server.mjs                 # 零依赖静态服务 + 设备代理 + 网段扫描
+├── server.mjs                 # 零依赖静态服务 + 设备代理 + 多台聚合 + 网段扫描
 ├── lib/metrics.mjs            # 归一化 / Prometheus 解析 / 历史映射（可单测）
-├── test/metrics.test.mjs      # node --test
+├── test/metrics.test.mjs      # 归一化 / 协议 / 历史单测
+├── test/demo.test.mjs         # 多台演示数据单测
 ├── docs/
-│   ├── DATA-CONTRACT.md       # 前端唯一数据契约
+│   ├── DATA-CONTRACT.md       # 前端唯一数据契约（含 /api/multi）
 │   ├── APP-PARITY.md          # 与 App 的对齐规格、来源与风险
 │   └── screenshots/           # README 截图（演示数据）
 ├── start.bat / start.sh
@@ -251,7 +288,7 @@ GitHub Pages，没有构建步骤。Pages 上的页面会自动进入**演示模
 ## 开发与测试
 
 ```bash
-node --test                 # 归一化 / Prometheus / 历史 / 协议单测
+node --test                 # 归一化 / Prometheus / 历史 / 协议 / 多台演示单测
 node server.mjs --host <host>
 ```
 
@@ -262,6 +299,7 @@ curl http://127.0.0.1:8787/api/health
 curl http://127.0.0.1:8787/api/snapshot?mode=json
 curl http://127.0.0.1:8787/api/history?limit=180
 curl http://127.0.0.1:8787/api/scan
+curl "http://127.0.0.1:8787/api/multi?hosts=host1,host2"
 ```
 
 ## 已知限制
@@ -271,6 +309,9 @@ curl http://127.0.0.1:8787/api/scan
 - 设备历史只有约 30 分钟；2 小时曲线只在页面打开期间记录，换浏览器/清缓存会丢。
 - 本次电量是换算估算，不是库仑计直读；会话切换后以设备新会话为准。
 - 160 W 是标称预算；实际分配由设备策略决定，本看板无法读取当前策略。
+- 扫描只覆盖本机物理网卡的 /24 网段；跨网段、多网卡或复杂 VLAN 请手动输入 IP。
+- 多台模式每台独立轮询；设备较多时首屏会慢一些，单台超时不影响其余设备。
+- 多台端口编号是“设备槽位 × 5 + 本地 id”：机 1 为 P0–P4、机 2 为 P5–P9；离线槽位保留，不重新压缩。
 - `.local` 解析在部分 Windows 上不可用；用 IP 或扫描。
 - 截图与 demo 均为合成数据，不代表任何真实设备状态。
 
@@ -278,11 +319,13 @@ curl http://127.0.0.1:8787/api/scan
 
 | 现象 | 处理 |
 | --- | --- |
-| 页面一直「未配置设备」 | 启动时加 `--host`，或在设置里填 IP / 扫描局域网 |
+| 页面一直「未配置设备」 | 启动 `node server.mjs`（不需要 `--host`），在发现设备卡片点扫描并选择 |
+| 扫描不到设备 | 确认电脑和充电器在同一 2.4G Wi-Fi；用 `--lan` 启动手机才能扫；跨网段请手动输入 IP |
 | `无法连接设备（连接超时）` | 确认电脑与充电器在同一 2.4G Wi-Fi；先用浏览器打开 `http://<IP>/metrics.json` |
 | `.local` 打不开 | 安装 Bonjour，或直接用路由器里看到的 IP |
 | 端口被占用 | 换 `--port 8790`；默认会自动顺延并打印实际端口 |
-| 页面显示「演示数据」 | 你在 GitHub Pages 或用 `?demo=1` 打开；本地 `http://127.0.0.1` 才是真机 |
+| 页面显示「演示数据」 | 你在 GitHub Pages 或用 `?demo=1` / `?demo=2` 打开；本地 `http://127.0.0.1` 才是真机 |
+| 多台只显示一台 | 设备弹窗切到「多台」，勾选至少 2 台；单台离线时其余继续显示并提示 |
 | 只有 Prometheus 模式 | 设置里切回「自动」；Prometheus 不提供时长/电量 |
 | 手机打不开 | 用 `--lan` 启动，并允许 Windows 防火墙的专用网络访问 |
 
@@ -301,4 +344,13 @@ curl http://127.0.0.1:8787/api/scan
 
 ## License
 
-[MIT](LICENSE) © 2026 wzqvip
+[PolyForm Noncommercial 1.0.0](LICENSE) © 2026 wzqvip
+
+**允许**：个人学习、研究、实验、测试、爱好项目等任何非商业目的；非营利组织、教育机构、公共研究/
+安全/健康/环保机构、政府机构的使用也属于允许范围。
+
+**禁止**：任何商业用途，包括但不限于公司内部生产使用、商业产品集成、SaaS/托管服务、收费部署、
+以本软件为基础的商业培训/咨询/外包交付。商业授权需另行取得仓库所有者的书面许可。
+
+> 因此本仓库**不是 OSI 定义的开源项目**，而是 **source-available / 非商用源码许可**。
+> 这与本仓库引用的第三方 MIT 项目无关；第三方代码/文档仍遵循其各自许可证。

@@ -128,9 +128,10 @@ function shortProtocol(port) {
   return label.length > 8 ? `${label.slice(0, 7)}…` : label || "—";
 }
 
-export function createDiagram(container, { onSelect, describe } = {}) {
+export function createDiagram(container, { onSelect, describe, monochrome = false } = {}) {
+  const mono = Boolean(monochrome);
   const svg = el("svg", {
-    class: "diagram mode-roomy",
+    class: `diagram mode-roomy${mono ? " is-monochrome" : ""}`,
     role: "group",
     "aria-label": t("flowAria"),
     preserveAspectRatio: "xMidYMid meet",
@@ -238,7 +239,7 @@ export function createDiagram(container, { onSelect, describe } = {}) {
     mode = nextMode;
     const L = LAYOUTS[mode];
     svg.setAttribute("viewBox", `0 0 ${L.viewBox[0]} ${L.viewBox[1]}`);
-    svg.setAttribute("class", `diagram mode-${mode}`);
+    svg.setAttribute("class", `diagram mode-${mode}${mono ? " is-monochrome" : ""}`);
 
     /* chips */
     const chipW = L.chip.w;
@@ -382,7 +383,9 @@ export function createDiagram(container, { onSelect, describe } = {}) {
       chip.powerNum.textContent = num;
       chip.powerUnit.textContent = unit;
       chip.name.textContent = port?.name || (id === 0 ? "A" : `C${id}`);
-      chip.dot.style.fill = portColor(id);
+      const accent = mono ? "var(--accent)" : portColor(id);
+      chip.g.style.setProperty("--pc", accent);
+      cable.g.style.setProperty("--pc", accent);
 
       if (port && !idle) {
         chip.detail.textContent = `${compactVolts(port.voltageMv)} · ${shortProtocol(port)}`;
@@ -460,8 +463,19 @@ export function createDiagram(container, { onSelect, describe } = {}) {
   /* Populate initial idle chips so the diagram is never empty. */
   update(snapshot);
 
+  function replay() {
+    if (!svg.isConnected) return;
+    svg.classList.add("replay-restart");
+    /* Force a reflow so the CSS animation restarts from zero. */
+    void svg.getBoundingClientRect();
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => svg.classList.remove("replay-restart"), 40);
+    });
+  }
+
   return {
     update,
+    replay,
     refreshLabels: () => {
       svg.setAttribute("aria-label", t("flowAria"));
       update(snapshot, { selected });

@@ -154,7 +154,75 @@ HTTP 端点的细节；数据层负责把设备的 `/metrics.json`、Prometheus 
 
 ---
 
-## 3. 其他代理接口
+## 3. 多台聚合
+
+`GET /api/multi?hosts=<host1>,<host2>&mode=auto|json|prometheus`
+
+最多 8 台；设备并行读取（并发 3）。单台失败不会拖垮整页，会出现在 `errors` 里。
+
+```jsonc
+{
+  "ok": true,
+  "source": "metrics.json",
+  "fetchedAt": 1762483200000,
+  "count": 2,
+  "devices": [
+    {
+      "index": 0,                 // 请求里的槽位，0-based；不做数组压缩
+      "label": "机 1",
+      "host": "192.168.1.20",
+      "device": { "slot": 1, "name": "CP02-A" },
+      "ports": [
+        {
+          "id": 0,
+          "globalId": 0,          // index × 5 + id：机1 = 0–4，机2 = 5–9
+          "deviceIndex": 0,
+          "name": "A",
+          "powerW": 0
+        }
+      ],
+      "totals": { "powerW": 37.4, "budgetW": 160 }
+    }
+  ],
+  "totals": {
+    "powerW": 72.4,               // 所有在线设备之和
+    "budgetW": 320,               // 160 × N（标称）
+    "utilization": 22.6,
+    "attachedCount": 7,
+    "chargingCount": 6,
+    "sessionWh": 12.345,
+    "deviceCount": 2,
+    "portCount": 10,
+    "onlineCount": 2
+  },
+  "errors": [
+    { "host": "192.168.1.99", "error": "DEVICE_UNREACHABLE", "message": "无法连接设备" }
+  ]
+}
+```
+
+- `devices[].index` 保持请求槽位：即使机 1 离线，机 2 仍然是 `index=1`、端口 `5–9`。
+- `globalId` 只用于展示/选择，不改变设备本地的 `id`（0–4）。
+- 前端多台模式必须用 `device.index` / `port.globalId` 编号，不要用数组下标重新编号。
+
+### 多台历史
+
+`GET /api/multi-history?hosts=<host1>,<host2>&limit=180`
+
+```jsonc
+{
+  "ok": true,
+  "fetchedAt": 1762483200000,
+  "devices": [
+    { "host": "192.168.1.20", "index": 0, "history": { /* 与 /api/history 相同 */ } }
+  ],
+  "errors": []
+}
+```
+
+---
+
+## 4. 其他代理接口
 
 | 接口 | 返回 |
 | --- | --- |
@@ -162,6 +230,8 @@ HTTP 端点的细节；数据层负责把设备的 `/metrics.json`、Prometheus 
 | `GET /api/info?host=` | `{ ok, host, device, endpoints, latencyMs }` |
 | `GET /api/scan` | `{ ok, subnets:[...], devices:[{ host, ip, name, psn, modelLabel, ports }] }` |
 | `GET /api/history?host=&limit=` | 见上 |
+| `GET /api/multi?hosts=&mode=` | 见「多台聚合」 |
+| `GET /api/multi-history?hosts=&limit=` | 见「多台历史」 |
 
 `host` 省略时使用启动参数 `--host` / 环境变量 `DEVICE_HOST`；都没有时返回
 `400 { error: "NO_DEVICE" }`，前端应引导用户输入地址或扫描局域网。
@@ -171,7 +241,7 @@ localhost、`*.local`、`*.lan`），拒绝公网地址，避免代理被当成 
 
 ---
 
-## 4. 协议表（固件 `FastChargingProtocol`）
+## 5. 协议表（固件 `FastChargingProtocol`）
 
 | code | key | 显示 | 说明 |
 | --- | --- | --- | --- |
@@ -202,16 +272,19 @@ localhost、`*.local`、`*.lan`），拒绝公网地址，避免代理被当成 
 
 ---
 
-## 5. 演示模式
+## 6. 演示模式
 
 - `?demo=1` 强制演示；GitHub Pages（`*.github.io`）自动进入演示。
+- `?demo=2`（或 `?demoDevices=2`）演示两台设备，端口编号 P0–P9；用于验证多台 UI。
 - 演示数据由 `assets/js/demo.js` 生成，形状与上面的 snapshot/history 完全一致，
   包含 5 个端口、协议切换、功率波动和历史曲线，**不含任何真实 PSN / MAC / SSID / IP**。
+- 多台演示由 `demoMulti(count)` / `demoMultiHistoryFor(count)` 聚合，`device.index` 为 0、1，
+  `ports[].globalId` 为 0–9。
 - 演示模式下页面应显示「演示数据」徽标，避免误认为真实设备。
 
 ---
 
-## 6. 数据来源与能力差异
+## 7. 数据来源与能力差异
 
 | 能力 | `/metrics.json` | Prometheus `/metrics` |
 | --- | --- | --- |

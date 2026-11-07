@@ -8,7 +8,7 @@
  * Public API is documented in docs/DATA-CONTRACT.md.
  */
 
-import { demoSnapshot, demoHistory } from "./demo.js";
+import { demoSnapshot, demoSnapshots, demoHistory } from "./demo.js";
 import { decodeProtocol, portColor, portName, portType } from "./protocols.js";
 
 export { decodeProtocol, portColor, portName, portType };
@@ -16,26 +16,68 @@ export { decodeProtocol, portColor, portName, portType };
 export const SETTINGS_KEY = "cocan-dash.settings.v1";
 export const DEFAULT_SETTINGS = {
   host: "",
+  devices: [], // [{ host, name, psn, modelLabel, lastSeen }]
+  multi: false,
+  multiHosts: [],
   mode: "auto", // auto | json | prometheus
   theme: "auto", // auto | light | dark
   lang: "zh", // zh | en
   intervalMs: 3000,
   window: "30m", // 30m | 2h | 5m
+  view: "pro", // pro | simple
 };
+
+function cleanDevices(list) {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const item of list) {
+    if (!item || typeof item.host !== "string") continue;
+    const host = item.host.trim();
+    if (!host || seen.has(host)) continue;
+    seen.add(host);
+    out.push({
+      host,
+      name: typeof item.name === "string" ? item.name.trim() : "",
+      psn: typeof item.psn === "string" ? item.psn : "",
+      modelLabel: typeof item.modelLabel === "string" ? item.modelLabel : "",
+      lastSeen: Number.isFinite(item.lastSeen) ? item.lastSeen : null,
+    });
+  }
+  return out;
+}
+
+function normalizeSettings(input) {
+  const out = { ...DEFAULT_SETTINGS, ...(input || {}) };
+  out.devices = cleanDevices(out.devices);
+  if (!out.devices.length && out.host) out.devices = cleanDevices([{ host: out.host }]);
+  if (out.host && !out.devices.some((d) => d.host === out.host)) {
+    out.devices = cleanDevices([{ host: out.host }, ...out.devices]);
+  }
+  if (!out.host && out.devices.length) out.host = out.devices[0].host;
+  if (!Array.isArray(out.multiHosts)) out.multiHosts = [];
+  const known = new Set(out.devices.map((d) => d.host));
+  out.multiHosts = [...new Set(out.multiHosts.filter((h) => known.has(h)))];
+  if (!out.multiHosts.length) out.multiHosts = out.devices.slice(0, 4).map((d) => d.host);
+  if (typeof out.multi !== "boolean") out.multi = Boolean(out.multi);
+  if (!["auto", "json", "prometheus"].includes(out.mode)) out.mode = "auto";
+  if (!["pro", "simple"].includes(out.view)) out.view = "pro";
+  return out;
+}
 
 export function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return { ...DEFAULT_SETTINGS };
+    if (!raw) return normalizeSettings({ ...DEFAULT_SETTINGS });
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_SETTINGS, ...(parsed && typeof parsed === "object" ? parsed : {}) };
+    return normalizeSettings(parsed && typeof parsed === "object" ? parsed : {});
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return normalizeSettings({ ...DEFAULT_SETTINGS });
   }
 }
 
 export function saveSettings(patch) {
-  const next = { ...loadSettings(), ...(patch || {}) };
+  const next = normalizeSettings({ ...loadSettings(), ...(patch || {}) });
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
   } catch {
@@ -50,19 +92,86 @@ export function resetSettings() {
   } catch {
     /* ignore */
   }
-  return { ...DEFAULT_SETTINGS };
+  return normalizeSettings({ ...DEFAULT_SETTINGS });
+}
+
+export function getDevices() {
+  return loadSettings().devices;
+}
+
+export function upsertDevice(device) {
+  if (!device || typeof device.host !== "string" || !device.host.trim()) return null;
+  const host = device.host.trim();
+  const current = loadSettings();
+  const entry = {
+    host,
+    name: typeof device.name === "string" ? device.name.trim() : "",
+    psn: typeof device.psn === "string" ? device.psn : "",
+    modelLabel: typeof device.modelLabel === "string" ? device.modelLabel : "",
+    lastSeen: Number.isFinite(device.lastSeen) ? device.lastSeen : Date.now(),
+  };
+  const devices = current.devices.filter((d) => d.host !== host);
+  devices.push(entry);
+  const settings = saveSettings({
+    devices,
+    host: current.host || host,
+    multiHosts: current.multiHosts.includes(host)
+      ? current.multiHosts
+      : [...current.multiHosts, host],
+  });
+  return settings.devices.find((d) => d.host === host) || entry;
+}
+
+export function removeDevice(host) {
+  const current = loadSettings();
+  const devices = current.devices.filter((d) => d.host !== host);
+  const multiHosts = current.multiHosts.filter((h) => h !== host);
+  const nextHost =
+    current.host === host ? devices[0]?.host || "" : current.host || devices[0]?.host || "";
+  const settings = saveSettings({
+    devices,
+    host: nextHost,
+    multiHosts,
+    multi: multiHosts.length > 1 ? current.multi : false,
+  });
+  return settings;
+}
+
+export function setActiveDevice(host) {
+  const target = String(host || "").trim();
+  if (!target) return loadSettings();
+  return saveSettings({ host: target, multi: false });
+}
+
+export function setMultiSelection({ enabled = true, hosts } = {}) {
+  const current = loadSettings();
+  const selected = Array.isArray(hosts)
+    ? [...new Set(hosts.filter((h) => current.devices.some((d) => d.host === h)))]
+    : current.multiHosts;
+  return saveSettings({
+    multi: Boolean(enabled) && selected.length > 1,
+    multiHosts: selected,
+  });
 }
 
 export function getUrlOverrides() {
   const params = new URLSearchParams(location.search);
+  const multi = params.get("multi") || "";
+  const demoRaw = params.get("demo");
+  const demoDevices = Number(params.get("demoDevices") || (demoRaw === "2" ? 2 : 1));
   return {
     host: params.get("host") || "",
     mode: params.get("mode") || "",
-    demo: params.get("demo") === "1",
+    demo: demoRaw !== null && demoRaw !== "0",
+    demoDevices: Math.max(1, Math.min(Number.isFinite(demoDevices) ? demoDevices : 1, 6)),
+    multiHosts: multi
+      .split(",")
+      .map((h) => h.trim())
+      .filter(Boolean),
   };
 }
 
-/** GitHub Pages / file:// / ?demo=1 → demo data (no device reachable). */
+/** GitHub Pages / file:// / ?demo=1|2 → demo data (no device reachable). */
 export function isDemoLocation() {
   if (getUrlOverrides().demo) return true;
   if (location.protocol === "file:") return true;
@@ -135,23 +244,125 @@ export async function scanLan() {
   return fetchJson("/api/scan", { timeoutMs: 25000 });
 }
 
+export async function getMulti({ hosts = [], mode } = {}) {
+  const list = [...new Set(hosts.filter(Boolean))];
+  if (!list.length) throw new Error("没有选择设备");
+  return fetchJson(`/api/multi${buildQuery({ hosts: list.join(","), mode })}`, {
+    timeoutMs: 25000,
+  });
+}
+
+export async function getMultiHistory({ hosts = [], limit = 180 } = {}) {
+  const list = [...new Set(hosts.filter(Boolean))];
+  if (!list.length) throw new Error("没有选择设备");
+  return fetchJson(`/api/multi-history${buildQuery({ hosts: list.join(","), limit })}`, {
+    timeoutMs: 30000,
+  });
+}
+
+function round2(value) {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * Add stable global port numbers to a list of single-device snapshots.
+ * Device 1 → ports 0–4, device 2 → 5–9, and so on.
+ */
+export function aggregateSnapshots(devices, now = Date.now()) {
+  const list = (Array.isArray(devices) ? devices : [])
+    .filter(Boolean)
+    .map((snapshot, index) => {
+      const ports = (Array.isArray(snapshot.ports) ? snapshot.ports : []).map((port) => ({
+        ...port,
+        deviceIndex: index,
+        globalId: index * 5 + Number(port.id),
+        deviceName: snapshot.device?.name || snapshot.host || `设备 ${index + 1}`,
+      }));
+      return {
+        ...snapshot,
+        index,
+        label: `机 ${index + 1}`,
+        device: { ...(snapshot.device || {}), slot: index + 1 },
+        ports,
+      };
+    });
+  const powerW = round2(
+    list.reduce((sum, device) => sum + (Number(device.totals?.powerW) || 0), 0),
+  );
+  const budgetW = list.reduce((sum, device) => sum + (Number(device.totals?.budgetW) || 0), 0);
+  const sessionValues = list
+    .map((device) => device.totals?.sessionWh)
+    .filter((value) => Number.isFinite(value));
+  const totals = {
+    powerW,
+    budgetW,
+    utilization: budgetW > 0 ? round2((powerW / budgetW) * 100) : null,
+    attachedCount: list.reduce((sum, device) => sum + (device.totals?.attachedCount || 0), 0),
+    chargingCount: list.reduce((sum, device) => sum + (device.totals?.chargingCount || 0), 0),
+    sessionWh: sessionValues.length
+      ? round2(sessionValues.reduce((a, b) => a + b, 0))
+      : null,
+    deviceCount: list.length,
+    portCount: list.reduce((sum, device) => sum + (device.ports?.length || 5), 0),
+    onlineCount: list.length,
+  };
+  return {
+    ok: true,
+    source: list[0]?.source || "multi",
+    fetchedAt: now,
+    count: list.length,
+    devices: list,
+    totals,
+    errors: [],
+  };
+}
+
 export function demo() {
   const now = Date.now();
   return demoSnapshot(now);
 }
 
-export function demoHistoryFor(now = Date.now(), limit = 180) {
-  return demoHistory(now, limit);
+export function demoMulti(count = 2, now = Date.now()) {
+  return aggregateSnapshots(demoSnapshots(now, Math.max(1, Math.min(count, 6))), now);
+}
+
+export function demoHistoryFor(now = Date.now(), limit = 180, index = 0) {
+  return demoHistory(now, limit, { index });
+}
+
+export function demoMultiHistoryFor(now = Date.now(), count = 2, limit = 180) {
+  const n = Math.max(1, Math.min(count, 6));
+  const nowTs = now;
+  return {
+    ok: true,
+    source: "demo",
+    fetchedAt: nowTs,
+    devices: Array.from({ length: n }, (_, index) => ({
+      host: `demo-${index + 1}.local`,
+      index,
+      history: demoHistory(nowTs, limit, { index }),
+    })),
+    errors: [],
+  };
 }
 
 export function effectiveSettings() {
   const settings = loadSettings();
   const url = getUrlOverrides();
+  const devices = settings.devices;
+  const multiHosts = url.multiHosts.length
+    ? url.multiHosts
+    : settings.multiHosts;
+  const multi = url.multiHosts.length ? true : settings.multi && multiHosts.length > 1;
   return {
     ...settings,
+    devices,
     host: url.host || settings.host,
+    multi,
+    multiHosts,
     mode: url.mode || settings.mode,
     demo: isDemoLocation(),
+    demoDevices: url.demoDevices,
   };
 }
 
