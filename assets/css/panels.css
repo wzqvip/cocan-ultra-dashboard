@@ -1,0 +1,159 @@
+/* ------------------------------------------------------------------ */
+/* Resizable dashboard panels + in-page fullscreen                     */
+/* ------------------------------------------------------------------ */
+
+.card[data-panel-resizable] {
+  position: relative;
+  min-width: min(260px, 100%);
+  max-width: 100%;
+  resize: both;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.card[data-panel-resizable]::-webkit-resizer {
+  background:
+    linear-gradient(
+      135deg,
+      transparent 0 52%,
+      color-mix(in srgb, var(--text-3) 55%, transparent) 52% 57%,
+      transparent 57% 67%,
+      color-mix(in srgb, var(--text-3) 55%, transparent) 67% 72%,
+      transparent 72%
+    );
+}
+
+/* Make the native resize corner a little easier to grab on touch. */
+.card[data-panel-resizable] {
+  scrollbar-width: thin;
+}
+
+.panel-fs {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    background 140ms ease;
+}
+
+.panel-fs:hover,
+.panel-fs:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-2));
+  color: var(--accent);
+  outline: none;
+}
+
+.panel-fs svg {
+  width: 15px;
+  height: 15px;
+  pointer-events: none;
+}
+
+.card[data-panel-resizable] > .panel-fs {
+  position: absolute;
+  z-index: 3;
+  top: 12px;
+  right: 12px;
+}
+
+.card[data-panel-resizable] .hero-head,
+.card[data-panel-resizable] .card-head {
+  padding-right: 38px;
+}
+
+/* The panel is lifted above a dimmed page; no browser Fullscreen API needed. */
+body.panel-fullscreen-open {
+  overflow: hidden;
+}
+
+body.panel-fullscreen-open::before {
+  position: fixed;
+  z-index: 999;
+  inset: 0;
+  background: rgba(10, 13, 18, 0.52);
+  backdrop-filter: blur(5px);
+  content: "";
+}
+
+.card.is-fullscreen {
+  position: fixed;
+  z-index: 1000;
+  inset: 12px;
+  display: flex;
+  flex-direction: column;
+  width: auto !important;
+  height: auto !important;
+  max-width: none;
+  max-height: none;
+  padding: clamp(14px, 2.4vw, 26px);
+  border-radius: 20px;
+  overflow: auto;
+  resize: none !important;
+  overscroll-behavior: contain;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.32);
+}
+
+.card.is-fullscreen .panel-fs {
+  position: fixed;
+  z-index: 1002;
+  top: 22px;
+  right: 22px;
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+}
+
+.card.is-fullscreen .diagram-wrap {
+  flex: 1 1 auto;
+}
+
+.card.is-fullscreen .chart-body,
+.card.is-fullscreen .chart-canvas-wrap {
+  flex: 1 1 auto;
+  min-height: 220px;
+}
+
+.card.is-fullscreen .ports-grid,
+.card.is-fullscreen .port-grid {
+  align-content: start;
+}
+
+@media (max-width: 720px) {
+  .card.is-fullscreen {
+    inset: 0;
+    padding: 14px;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .card.is-fullscreen .panel-fs {
+    top: 12px;
+    right: 12px;
+  }
+
+  .card.is-fullscreen .hero-head {
+    padding-right: 38px;
+  }
+
+  .card.is-fullscreen .card-head {
+    padding-right: 34px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-fs {
+    transition: none;
+  }
+}

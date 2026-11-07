@@ -48,6 +48,17 @@ const RANGES = { "5m": 5 * 60 * 1000, "30m": 30 * 60 * 1000, "2h": 2 * 60 * 60 *
 const RANGE_SUB = { "5m": "chartSub5m", "30m": "chartSub30m", "2h": "chartSub2h" };
 const HISTORY_MAX_AGE = 2 * 60 * 60 * 1000;
 const DEVICE_COLORS = ["#FF7315", "#2C89FB", "#22C55E", "#A855F7", "#EC4899", "#0EA5E9"];
+const PANEL_DEFS = [
+  { id: "hero", selector: "#hero" },
+  { id: "flow", selector: ".diagram-card" },
+  { id: "chart", selector: ".chart-card" },
+  { id: "ports", selector: ".ports-card" },
+];
+const PANEL_SIZE_KEY = "cocan.panelSizes";
+const PANEL_EXPAND_ICON =
+  '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 3.5H3.5v4M12.5 3.5h4v4M7.5 16.5H3.5v-4M12.5 16.5h4v-4"/></svg>';
+const PANEL_CLOSE_ICON =
+  '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15"/></svg>';
 
 const WARN_STATES = new Set([
   "OVER_TEMP_WARNING",
@@ -246,6 +257,138 @@ function cacheDom() {
   dom.scanList = $("#scanList");
   dom.scanCount = $("#scanCount");
   dom.setupHint = $("#setupHint");
+}
+
+/* ------------------------------------------------------------------ */
+/* Resizable panels + in-page fullscreen                              */
+/* ------------------------------------------------------------------ */
+
+function readPanelSizes() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PANEL_SIZE_KEY) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePanelSizes(sizes) {
+  try {
+    localStorage.setItem(PANEL_SIZE_KEY, JSON.stringify(sizes));
+  } catch {
+    /* storage full/blocked: resizing still works for this session */
+  }
+}
+
+function setPanelFullscreenButton(panel, on) {
+  const button = panel.querySelector(".panel-fs");
+  if (!button) return;
+  const key = on ? "panelExitFullscreen" : "panelFullscreen";
+  button.dataset.i18nTitle = key;
+  button.dataset.i18nAria = key;
+  button.title = t(key);
+  button.setAttribute("aria-label", t(key));
+  button.setAttribute("aria-pressed", String(on));
+  button.innerHTML = on ? PANEL_CLOSE_ICON : PANEL_EXPAND_ICON;
+}
+
+function exitPanelFullscreen(panel) {
+  if (!panel?.classList.contains("is-fullscreen")) return;
+  panel.classList.remove("is-fullscreen");
+  const prevRole = panel.dataset.prevRole || "";
+  if (prevRole) panel.setAttribute("role", prevRole);
+  else panel.removeAttribute("role");
+  panel.removeAttribute("aria-modal");
+  delete panel.dataset.prevRole;
+  if (!document.querySelector(".card.is-fullscreen")) {
+    document.body.classList.remove("panel-fullscreen-open");
+  }
+  setPanelFullscreenButton(panel, false);
+  window.requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+}
+
+function enterPanelFullscreen(panel) {
+  if (!panel || panel.classList.contains("is-fullscreen")) return;
+  const previous = document.querySelector(".card.is-fullscreen");
+  if (previous) exitPanelFullscreen(previous);
+  panel.dataset.prevRole = panel.getAttribute("role") || "";
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-modal", "true");
+  panel.classList.add("is-fullscreen");
+  document.body.classList.add("panel-fullscreen-open");
+  setPanelFullscreenButton(panel, true);
+  window.requestAnimationFrame(() => {
+    window.dispatchEvent(new Event("resize"));
+    panel.querySelector(".panel-fs")?.focus({ preventScroll: true });
+  });
+}
+
+function togglePanelFullscreen(panel) {
+  if (panel.classList.contains("is-fullscreen")) exitPanelFullscreen(panel);
+  else enterPanelFullscreen(panel);
+}
+
+function initPanelControls() {
+  for (const def of PANEL_DEFS) {
+    const panel = $(def.selector);
+    if (!panel) continue;
+    panel.dataset.panel = def.id;
+    panel.dataset.panelResizable = "true";
+    panel.dataset.i18nTitle = "panelResize";
+    panel.title = t("panelResize");
+
+    const saved = readPanelSizes()[def.id];
+    if (saved) {
+      const maxWidth = Math.max(260, window.innerWidth - 24);
+      if (Number(saved.w) > 0) panel.style.width = `${Math.min(Number(saved.w), maxWidth)}px`;
+      if (Number(saved.h) > 0) panel.style.height = `${Math.min(Number(saved.h), 4000)}px`;
+    }
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "panel-fs";
+    button.dataset.i18nTitle = "panelFullscreen";
+    button.dataset.i18nAria = "panelFullscreen";
+    button.title = t("panelFullscreen");
+    button.setAttribute("aria-label", t("panelFullscreen"));
+    button.setAttribute("aria-pressed", "false");
+    button.innerHTML = PANEL_EXPAND_ICON;
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      togglePanelFullscreen(panel);
+    });
+    panel.append(button);
+
+    if (typeof ResizeObserver === "function") {
+      let saveTimer = 0;
+      const observer = new ResizeObserver(() => {
+        if (panel.classList.contains("is-fullscreen")) return;
+        const width = Number.parseFloat(panel.style.width);
+        const height = Number.parseFloat(panel.style.height);
+        if (!Number.isFinite(width) && !Number.isFinite(height)) return;
+        window.clearTimeout(saveTimer);
+        saveTimer = window.setTimeout(() => {
+          const sizes = readPanelSizes();
+          const entry = { ...(sizes[def.id] || {}) };
+          if (Number.isFinite(width)) entry.w = Math.round(width);
+          if (Number.isFinite(height)) entry.h = Math.round(height);
+          sizes[def.id] = entry;
+          writePanelSizes(sizes);
+          window.dispatchEvent(new Event("resize"));
+        }, 180);
+      });
+      observer.observe(panel);
+    }
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    const panel = document.querySelector(".card.is-fullscreen");
+    if (!panel) return;
+    event.preventDefault();
+    exitPanelFullscreen(panel);
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -1558,7 +1701,7 @@ function renderMeter() {
 }
 
 /* ------------------------------------------------------------------ */
-/* CUKTECH-inspired view                                              */
+/* MOU TAI KE-inspired view (legacy internal id: cuktech)             */
 /* ------------------------------------------------------------------ */
 
 function ckRing(total, budget) {
@@ -3131,6 +3274,7 @@ function boot() {
   applyTheme(state.settings.theme);
   applyI18n(document);
   updateStaticTranslations();
+  initPanelControls();
 
   bindEvents();
 

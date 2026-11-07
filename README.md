@@ -2,7 +2,7 @@
 
 > 一个**只读、零依赖**的局域网 Web 仪表盘，把 CANDYSIGN 制糖工厂 AI 小电拼（CP-02 / Pro / Ultra，160 W 4C1A）的
 > 五口实时功率、电压、电流、协议、充电时长与累计电量，画成 App 同款的功率分布图。
-> 支持扫描/选择设备、多台一起看（P0–P4、P5–P9…）、专业/简洁/仪表/CUKTECH 四种视图。
+> 支持扫描/选择设备、多台一起看（P0–P4、P5–P9…）、专业/简洁/仪表/某泰科四种视图。
 > 不装 App、不登录账号、不需要 MCP token，也不会修改充电器的任何设置。
 >
 > **许可证：PolyForm Noncommercial 1.0.0 — 禁止商用**（非 OSI 开源，source-available）。
@@ -126,10 +126,12 @@ Ultra 多了 Premium Kit、状态屏颜色和 SKU 权益；**龙虾服务 / MCP 
   实心长度=当前输出、浅色轨道=端口能力（A 60 W、C 140 W），对齐官方 App 的 `160W / 5` 表达。
 - **仪表视图（Power-Z 风格）**：每个端口一张 2×2 数据格——电压、电流、功率、本次电量，
   外加协议、状态、充电时长和 30 分钟功率 sparkline；顶部有总功率/总电量/协议分布。
-- **CUKTECH 风格**：总输出环形仪表、每口大号功率、V/A、协议、功率条和本次电量；
+- **某泰科风格**：总输出环形仪表、每口大号功率、V/A、协议、功率条和本次电量；
   深色科技面板。仅视觉风格参考，非官方合作或复刻。
-- **更多功率 UI**：四种视图都支持单台/多台、Pro/Ultra 混用；仪表和 CUKTECH 视图按设备
+- **更多功率 UI**：四种视图都支持单台/多台、Pro/Ultra 混用；仪表和某泰科视图按设备
   分组，端口继续使用 P0–P4、P5–P9 编号。
+- **面板自由调大小 / 单个全屏**：功率总览、功率流向、功率曲线、端口明细都可以拖右下角
+  改尺寸，尺寸会记住；每块面板右上角有全屏按钮，适合手机、副屏或投屏只看一块。
 - **实时总览**：总功率、在充口数、本次累计电量、DC 输入母线电压、开机时长。
 - **Pro / Ultra 混用**：每台设备按 `device_model` 自动显示 **Pro** 或 **Ultra**；多台模式可同时
   加入 Pro 与 Ultra，列表、端口和聚合功率各自归属，不会把整页写死成某一种型号。
@@ -331,16 +333,24 @@ ionbridge_uptime_seconds
 
 ## 多视图
 
-| 仪表：每口 2×2（Power-Z 风格） | CUKTECH 风格 |
+| 仪表：每口 2×2（Power-Z 风格） | 某泰科风格 |
 | --- | --- |
-| <img src="docs/screenshots/meter.png" alt="仪表视图：每口 2×2 电压/电流/功率/电量 + 协议" width="560"> | <img src="docs/screenshots/cuktech.png" alt="CUKTECH 风格：总输出环 + 端口功率条" width="560"> |
+| <img src="docs/screenshots/meter.png" alt="仪表视图：每口 2×2 电压/电流/功率/电量 + 协议" width="560"> | <img src="docs/screenshots/moutaike.png" alt="某泰科风格：总输出环 + 端口功率条" width="560"> |
 | 电压、电流、功率、本次电量四格；协议、状态、时长、功率 sparkline | 总输出环、每口大号功率、V/A、协议、功率条、本次电量 |
 
 > 仪表视图的数据格是 **电压 / 电流 / 功率 / 本次电量**，协议放在端口标题下方；
 > 2×2 只是每个端口内部的数据布局，端口本身仍按 P0–P4、P5–P9 排列。
 >
 > 两种新视图是风格参考，非官方复刻：[Power-Z KM003C](https://www.power-z.cn/blogs/power-z-km003c/ten%20common%20functions)、
-> [CUKTECH 15 Ultra](https://tech.yahoo.com/general/articles/fast-charging-detailed-display-cuktech-160000613.html)。
+> [某泰科风格参考：CUKTECH 15 Ultra](https://tech.yahoo.com/general/articles/fast-charging-detailed-display-cuktech-160000613.html)。
+
+### 面板大小和全屏
+
+- 拖动面板右下角可以自由改大小；尺寸存入 `localStorage`，刷新/重开保留。
+- 每块面板标题栏右侧有全屏按钮：功率总览、功率流向、功率曲线、端口明细都可单独全屏。
+- 全屏是页面内覆盖层，不依赖浏览器 Fullscreen API，手机、iPad、副屏都能用；按 `Esc`
+  或右上角关闭按钮退出。
+- 全屏时只显示这一块面板，适合把手机横过来当单表，或把副屏单独投总功率/曲线。
 
 ## 部署
 
@@ -377,9 +387,9 @@ GitHub Pages，没有构建步骤。Pages 上的页面会自动进入**演示模
 .
 ├── index.html                 # 单页仪表盘
 ├── assets/
-│   ├── css/                   # 设计 token、布局、组件、设备弹窗、views.css
+│   ├── css/                   # 设计 token、布局、组件、设备弹窗、views.css、panels.css
 │   └── js/
-│       ├── app.js             # 状态与渲染（单台/多台、专业/简洁/仪表/CUKTECH）
+│       ├── app.js             # 状态与渲染（单台/多台、专业/简洁/仪表/某泰科）
 │       ├── data.js            # 代理客户端、设备列表、HistoryStore、格式化
 │       ├── demo.js            # 合成演示数据（1–6 台）
 │       ├── diagram.js         # SVG 功率分布图 + 重播功率流
