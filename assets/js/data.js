@@ -420,6 +420,21 @@ export function effectiveSettings() {
 
 const HISTORY_PREFIX = "cocan-dash.history.v1";
 
+/**
+ * Sort by timestamp and keep one sample per timestamp (last write wins).
+ * Older versions / multiple tabs can leave localStorage samples out of order;
+ * drawing them directly makes the line jump backwards and look like diagonal
+ * spikes. Normalize at every boundary (load, merge, read).
+ */
+export function normalizeHistorySamples(samples) {
+  const byTime = new Map();
+  for (const sample of Array.isArray(samples) ? samples : []) {
+    if (!sample || !Number.isFinite(sample.t) || !Number.isFinite(sample.powerW)) continue;
+    byTime.set(sample.t, sample);
+  }
+  return [...byTime.values()].sort((a, b) => a.t - b.t);
+}
+
 export class HistoryStore {
   constructor(host, { maxAgeMs = 2 * 3600 * 1000, minGapMs = 3000, saveEveryMs = 8000 } = {}) {
     this.host = host || "default";
@@ -444,9 +459,7 @@ export class HistoryStore {
           id: p.id,
           name: p.name || portName(p.id),
           type: p.type || portType(p.id),
-          samples: p.samples
-            .filter((s) => Number.isFinite(s?.t) && Number.isFinite(s?.powerW))
-            .slice(-4000),
+          samples: normalizeHistorySamples(p.samples).slice(-4000),
         });
       }
       this.trim(Date.now());
@@ -500,15 +513,17 @@ export class HistoryStore {
     if (!history || !Array.isArray(history.ports)) return;
     for (const p of history.ports) {
       const samples = p.samples || [];
-      for (const s of samples) {
-        if (!Number.isFinite(s?.t) || !Number.isFinite(s?.powerW)) continue;
-        this.append({ id: p.id, name: p.name, type: p.type }, {
-          t: s.t,
-          powerW: s.powerW,
-          voltageMv: s.voltageMv,
-          currentMa: s.currentMa,
-        });
+      let entry = this.ports.get(p.id);
+      if (!entry) {
+        entry = { id: p.id, name: p.name, type: p.type, samples: [] };
+        this.ports.set(p.id, entry);
       }
+      entry.samples = normalizeHistorySamples([
+        ...(entry.samples || []),
+        ...samples.filter(
+          (s) => Number.isFinite(s?.t) && Number.isFinite(s?.powerW),
+        ),
+      ]).slice(-4000);
     }
     this.trim(Date.now());
     this.save();
@@ -538,7 +553,12 @@ export class HistoryStore {
   series() {
     return [...this.ports.values()]
       .sort((a, b) => a.id - b.id)
-      .map((p) => ({ id: p.id, name: p.name, type: p.type, samples: p.samples }));
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        type: p.type,
+        samples: normalizeHistorySamples(p.samples),
+      }));
   }
 
   clear() {

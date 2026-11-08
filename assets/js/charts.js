@@ -151,7 +151,9 @@ export class PowerChart {
   windowSamples(samples) {
     if (!Array.isArray(samples)) return [];
     const min = this.now - this.rangeMs;
-    return samples.filter((sample) => Number.isFinite(sample.t) && sample.t >= min && sample.t <= this.now);
+    return samples
+      .filter((sample) => Number.isFinite(sample.t) && sample.t >= min && sample.t <= this.now)
+      .sort((a, b) => a.t - b.t);
   }
 
   maxInWindow() {
@@ -459,7 +461,9 @@ export function drawSparkline(canvas, samples, color, options = {}) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
 
-  const list = Array.isArray(samples) ? samples : [];
+  const list = (Array.isArray(samples) ? samples : [])
+    .filter((sample) => Number.isFinite(sample?.t) && Number.isFinite(sample?.powerW))
+    .sort((a, b) => a.t - b.t);
   if (list.length === 0) return;
 
   const maxGap = options.maxGapMs || 90000;

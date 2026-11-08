@@ -2121,21 +2121,27 @@ function renderSystem() {
 /* ------------------------------------------------------------------ */
 
 function computeTotal(seriesList) {
+  const normalized = (seriesList || []).map((series) => ({
+    ...series,
+    samples: (series.samples || [])
+      .slice()
+      .sort((a, b) => a.t - b.t),
+  }));
   const times = new Set();
-  for (const series of seriesList) {
-    for (const sample of series.samples || []) {
+  for (const series of normalized) {
+    for (const sample of series.samples) {
       if (Number.isFinite(sample.t)) times.add(sample.t);
     }
   }
   const sorted = [...times].sort((a, b) => a - b);
   if (sorted.length === 0) return [];
-  const cursors = seriesList.map(() => 0);
+  const cursors = normalized.map(() => 0);
   const maxGap = 90000;
   const result = [];
   for (const t of sorted) {
     let sum = 0;
-    for (let i = 0; i < seriesList.length; i += 1) {
-      const samples = seriesList[i].samples || [];
+    for (let i = 0; i < normalized.length; i += 1) {
+      const samples = normalized[i].samples;
       while (cursors[i] + 1 < samples.length && samples[cursors[i] + 1].t <= t) cursors[i] += 1;
       const sample = samples[cursors[i]];
       if (sample && sample.t <= t && t - sample.t <= maxGap) sum += Number(sample.powerW) || 0;
