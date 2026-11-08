@@ -683,6 +683,11 @@ function urlWithDemo(count = 1) {
   url.searchParams.set("demo", String(count));
   url.searchParams.delete("demoDevices");
   url.searchParams.delete("multi");
+  // A previous real-mode link leaves ?local=1 / ?api=... behind. Demo mode
+  // must explicitly remove them, otherwise isDemoLocation() still returns
+  // real and the UI snaps back to the device.
+  url.searchParams.delete("local");
+  url.searchParams.delete("api");
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
